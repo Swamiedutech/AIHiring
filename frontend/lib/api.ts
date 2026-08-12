@@ -162,6 +162,7 @@ export const hrApi = {
 
   // Offers
   createOffer: (data: object) => api.post("/offer/create", data),
+  getDispatchedOffers: () => api.get("/offer/dispatched"),
 
   // Notifications
   getNotifications: () => api.get("/hr/notifications"),
@@ -234,6 +235,8 @@ export const candidateApi = {
     api.post("/dashboard/candidate/resume/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     }),
+  autofillFromResume: () =>
+    api.post("/dashboard/candidate/resume/autofill"),
   uploadProfileImage: (formData: FormData) =>
     api.post("/dashboard/candidate/profile-image/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" },

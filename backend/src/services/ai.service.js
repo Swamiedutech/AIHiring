@@ -134,15 +134,24 @@ Evaluate ALL insights specifically for this role.
                 "overall_score": 0-100,
                 "summary": "Role-specific professional summary",
                 "highest_qualification": "degree name e.g. B.Tech in CS or null",
-                "education": [{ "degree": "", "specialization": "", "institution": "", "year_of_passout": "" }],
+                "education": [{ "degree": "", "specialization": "", "institution": "", "year_of_passout": "", "cgpa": null }],
+                "location": "City, State extracted from resume or null",
+                "domain": "Primary professional domain e.g. Software Engineering, Marketing, Data Science, Mechanical Engineering or null",
+                "area_of_interest": "For freshers: research interests or project focus areas or null",
+                "current_company": "Most recent employer name if working professional, else null",
+                "working_address": "Office/work location from resume if mentioned, else null",
                 "strengths": ["role-specific strength 1", "strength 2", "strength 3", "strength 4", "strength 5"],
                 "weaknesses": ["role-specific weakness 1", "weakness 2", "weakness 3", "weakness 4", "weakness 5"],
                 "role_fit": { "fit_level": "High/Medium/Low", "explanation": "role-specific fit explanation" }
             }
             
             CRITICAL RULES:
-            - If candidate is a FRESHER (student/no full-time work), set experience_years=0 and candidate_type=FRESHER
+            - If candidate has NO work experience of any kind, set experience_years=0 and candidate_type=FRESHER
+            - If candidate has ANY work experience (including internships, part-time, or full-time roles), set candidate_type=WORKING_PROFESSIONAL and extract current_company (or most recent internship company)
+            - If experience is less than 1 year (e.g. short internships), set experience_years=1 (minimum for professionals)
             - If highest_qualification cannot be found, set it to null (do not guess)
+            - Extract CGPA/GPA/percentage from education section if available
+            - Extract location/city from contact or address info if available
             - All strengths/weaknesses must be relevant to the target job role if specified
         `;
 

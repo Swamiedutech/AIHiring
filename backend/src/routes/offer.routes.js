@@ -7,7 +7,8 @@ const roleMiddleware = require("../middleware/role.middleware");
 const {
   createOffer,
   respondOffer,
-  getOfferDetails
+  getOfferDetails,
+  getDispatchedOffers
 } = require("../controllers/offer.controller");
 
 const templateController = require("../controllers/offerTemplate.controller");
@@ -56,6 +57,14 @@ router.post(
   authMiddleware,
   roleMiddleware(["CANDIDATE"]),
   respondOffer
+);
+
+/* Get all dispatched offers */
+router.get(
+  "/dispatched",
+  authMiddleware,
+  roleMiddleware(["HR", "ADMIN"]),
+  getDispatchedOffers
 );
 
 module.exports = router;

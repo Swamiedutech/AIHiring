@@ -3,7 +3,8 @@ const {
   getDashboardOverview,
   getApplicationDetails,
   getNextAction,
-  updateCandidateProfile
+  updateCandidateProfile,
+  autofillFromResume
 } = require("../controllers/candidateDashboard.controller");
 
 const authMiddleware = require("../middleware/auth.middleware");
@@ -46,6 +47,8 @@ router.post(
   upload.single("resume"),
   uploadResume
 );
+
+router.post("/resume/autofill", autofillFromResume);
 
 router.post(
   "/profile-image/upload",

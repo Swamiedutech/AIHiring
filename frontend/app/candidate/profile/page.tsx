@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Mail, Phone, MapPin, GraduationCap, Briefcase,
   Calendar, Save, Loader2, X, Sparkles, Search,
-  FileText, Camera, CheckCircle2, Star, Plus, PenTool, ShieldCheck
+  FileText, Camera, CheckCircle2, Star, Plus, PenTool, ShieldCheck,
+  Download, ExternalLink, RefreshCw
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUIStore } from "@/lib/store";
@@ -103,18 +104,61 @@ export default function CandidateProfilePage() {
     }
   });
 
+  const applyAutofillData = (autofillData: any) => {
+    if (!autofillData) return;
+    setForm(f => ({
+      ...f,
+      education: autofillData.education || f.education,
+      specialization: autofillData.specialization || f.specialization,
+      experience_years: autofillData.experience_years ?? f.experience_years,
+      phone: autofillData.phone || f.phone,
+      location: autofillData.location || f.location,
+      skills: autofillData.skills?.length ? autofillData.skills : f.skills,
+      cgpa: autofillData.cgpa || f.cgpa,
+      year_of_passout: autofillData.year_of_passout || f.year_of_passout,
+      summary: autofillData.summary || f.summary,
+      candidate_type: autofillData.candidate_type || f.candidate_type,
+      domain: autofillData.domain || f.domain,
+      area_of_interest: autofillData.area_of_interest || f.area_of_interest,
+      current_company: autofillData.current_company || f.current_company,
+      working_address: autofillData.working_address || f.working_address,
+    }));
+  };
+
   const uploadResumeMutation = useMutation({
     mutationFn: (file: File) => {
       const fd = new FormData();
       fd.append("resume", file);
       return candidateApi.uploadResume(fd);
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ["candidate-overview"] });
-      toast.success("Resume updated and re-parsed successfully");
+      const autofillData = res.data?.data?.autofillData;
+      if (autofillData) {
+        applyAutofillData(autofillData);
+        toast.success("Resume parsed! Profile auto-filled. Please review and save.");
+      } else {
+        toast.success("Resume uploaded successfully.");
+      }
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.message || "Failed to upload resume");
+    }
+  });
+
+  const autofillMutation = useMutation({
+    mutationFn: () => candidateApi.autofillFromResume(),
+    onSuccess: (res) => {
+      const autofillData = res.data?.autofillData;
+      if (autofillData) {
+        applyAutofillData(autofillData);
+        toast.success("Profile auto-filled from resume! Please review and save.");
+      } else {
+        toast.info("No data extracted. Try re-uploading your resume.");
+      }
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.error || "Failed to auto-fill from resume");
     }
   });
 
@@ -410,10 +454,16 @@ export default function CandidateProfilePage() {
               <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><PenTool className="w-6 h-6" /></div>
               <h4 className="text-xl font-bold">Skills & Expertise</h4>
             </div>
-            <Button variant="outline" size="sm" className="rounded-xl border-slate-100 text-blue-600 font-bold gap-2" onClick={() => {
-              resetFormFromData();
-              toast.success("Form re-filled from latest resume data");
-            }}><Sparkles className="w-3 h-3" /> Auto-fill from Resume</Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="rounded-xl border-slate-100 text-blue-600 font-bold gap-2" 
+              onClick={() => autofillMutation.mutate()}
+              disabled={autofillMutation.isPending}
+            >
+              {autofillMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              {autofillMutation.isPending ? "Parsing Resume..." : "Auto-fill from Resume"}
+            </Button>
           </div>
           <div className="relative mb-6">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -448,19 +498,54 @@ export default function CandidateProfilePage() {
           </div>
           <div className="space-y-4 relative z-10">
             <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center backdrop-blur-md"><FileText className="w-6 h-6" /></div>
-            <h4 className="text-lg font-bold">Your Resume Information</h4>
-            <p className="text-blue-100 leading-relaxed font-medium">We've parsed your resume to suggest profile details. You can override them above.</p>
+            <h4 className="text-lg font-bold">Your Resume</h4>
+            <p className="text-blue-100 leading-relaxed font-medium">Upload your resume to auto-fill your profile. Recruiters can also view your resume directly.</p>
           </div>
-          <Card className="bg-white text-slate-900 border-none rounded-lg p-6 mt-8 flex items-center justify-between relative z-10 shadow-sm">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center text-red-500"><FileText className="w-6 h-6" /></div>
-              <div>
-                <p className="font-bold truncate max-w-[200px]">{candidate?.resume_path?.split("/").pop() || "Resume_Not_Found.pdf"}</p>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                  Uploaded on {candidate?.updated_at ? new Date(candidate.updated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
-                </p>
+          <Card className="bg-white text-slate-900 border-none rounded-lg p-5 mt-6 relative z-10 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center text-red-500 shrink-0"><FileText className="w-5 h-5" /></div>
+                <div className="min-w-0">
+                  <p className="font-bold truncate max-w-[180px] text-sm">{candidate?.resume_path?.split("/").pop() || "No Resume"}</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                    {candidate?.updated_at ? new Date(candidate.updated_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not uploaded'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-1.5">
+                {candidate?.resume_path && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="w-8 h-8 rounded-lg border-slate-200 text-blue-600 hover:bg-blue-50"
+                      onClick={() => window.open(`http://localhost:5000${candidate.resume_path}`, '_blank')}
+                      title="View Resume"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </Button>
+                    <a
+                      href={`http://localhost:5000${candidate.resume_path}`}
+                      download
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 text-green-600 hover:bg-green-50 transition-colors"
+                      title="Download Resume"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </a>
+                  </>
+                )}
               </div>
             </div>
+            {/* Resume Preview */}
+            {candidate?.resume_path?.endsWith('.pdf') && (
+              <div className="rounded-lg overflow-hidden border border-slate-100 bg-slate-50">
+                <iframe
+                  src={`http://localhost:5000${candidate.resume_path}#toolbar=0&navpanes=0`}
+                  className="w-full h-[200px]"
+                  title="Resume Preview"
+                />
+              </div>
+            )}
             <div className="flex gap-2">
               <input
                 type="file"
@@ -475,14 +560,23 @@ export default function CandidateProfilePage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-xl border-slate-100 text-blue-600 font-bold"
+                className="flex-1 rounded-xl border-slate-200 text-blue-600 font-bold gap-2"
                 onClick={() => document.getElementById('resume-upload')?.click()}
                 disabled={uploadResumeMutation.isPending}
               >
-                {uploadResumeMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : null}
-                Change Resume
+                {uploadResumeMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                {candidate?.resume_path ? 'Change Resume' : 'Upload Resume'}
               </Button>
-              <Button variant="ghost" size="icon" className="text-slate-400 hover:text-red-500"><X className="w-4 h-4" /></Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 rounded-xl border-blue-200 bg-blue-50 text-blue-700 font-bold gap-2 hover:bg-blue-100"
+                onClick={() => autofillMutation.mutate()}
+                disabled={autofillMutation.isPending || !candidate?.resume_path}
+              >
+                {autofillMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                Auto-fill Profile
+              </Button>
             </div>
           </Card>
         </Card>

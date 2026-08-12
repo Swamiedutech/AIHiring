@@ -105,6 +105,13 @@ export default function CandidatesPage() {
       filtered = filtered.filter((app: any) => app.source === sourceFilter);
     }
 
+    // Sort by score in descending order
+    filtered = [...filtered].sort((a: any, b: any) => {
+      const scoreA = a.aiScore ?? a.overall_score ?? 0;
+      const scoreB = b.aiScore ?? b.overall_score ?? 0;
+      return scoreB - scoreA;
+    });
+
     return filtered;
   }, [applicationsRaw, sourceFilter]);
 

@@ -5,6 +5,7 @@ import { useAuthStore, useUIStore } from "@/lib/store";
 import { getInitials } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { NotificationsDropdown } from "./NotificationsDropdown";
+import { ThemeToggle } from "@/components/landing/ThemeToggle";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -52,6 +53,7 @@ export default function CandidateTopbar({ title }: { title?: string }) {
       </div>
 
       <div className="flex items-center gap-6">
+        <ThemeToggle />
         <NotificationsDropdown />
 
         <div className="relative" ref={userRef}>

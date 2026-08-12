@@ -505,3 +505,57 @@ async function findLatestActiveAction(applications, candidateId) {
       return null;
   }
 }
+
+/**
+ * Autofill profile from existing resume — re-parses and returns data without saving
+ */
+exports.autofillFromResume = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.candidate?.id;
+    const { Candidate } = require('../models');
+    const aiService = require('../services/ai.service');
+    const path = require('path');
+
+    const candidate = await Candidate.findOne({ where: { user_id: userId } });
+    if (!candidate) return res.status(404).json({ error: 'Candidate profile not found' });
+    if (!candidate.resume_path) return res.status(400).json({ error: 'No resume uploaded. Please upload your resume first.' });
+
+    // resume_path in DB is like "/uploads/resumes/filename.pdf"
+    // multer saves to "uploads/resumes/" relative to the backend root (process.cwd())
+    const resumeRelPath = candidate.resume_path.startsWith('/') ? candidate.resume_path.slice(1) : candidate.resume_path;
+    const resumeAbsPath = path.resolve(process.cwd(), resumeRelPath);
+    const fs = require('fs');
+    if (!fs.existsSync(resumeAbsPath)) {
+      return res.status(400).json({ error: 'Resume file not found on server. Please re-upload your resume.' });
+    }
+
+    const aiParsedData = await aiService.parseResumeWithAI(resumeAbsPath);
+
+    const firstEdu = aiParsedData.education && aiParsedData.education.length > 0 ? aiParsedData.education[0] : null;
+    const safeInt = (val, fallback) => { const p = parseInt(val); return isNaN(p) ? fallback : p; };
+    const resolvedCandidateType = aiParsedData.candidate_type || (safeInt(aiParsedData.experience_years, 0) === 0 ? 'FRESHER' : 'WORKING_PROFESSIONAL');
+    const cgpaFromAI = firstEdu?.cgpa ? parseFloat(firstEdu.cgpa) : null;
+
+    const autofillData = {
+      education: aiParsedData.highest_qualification || firstEdu?.degree || '',
+      specialization: firstEdu?.specialization || '',
+      experience_years: safeInt(aiParsedData.experience_years, 0),
+      phone: aiParsedData.contact_info?.phone || '',
+      location: aiParsedData.location || '',
+      skills: aiParsedData.skills ? (Array.isArray(aiParsedData.skills) ? aiParsedData.skills : Object.values(aiParsedData.skills).flat()) : [],
+      cgpa: cgpaFromAI || 0,
+      year_of_passout: firstEdu?.year_of_passout ? safeInt(firstEdu.year_of_passout, 0) : 0,
+      summary: aiParsedData.summary || '',
+      candidate_type: resolvedCandidateType,
+      domain: aiParsedData.domain || '',
+      area_of_interest: resolvedCandidateType === 'FRESHER' ? (aiParsedData.area_of_interest || '') : '',
+      current_company: resolvedCandidateType === 'WORKING_PROFESSIONAL' ? (aiParsedData.current_company || '') : '',
+      working_address: resolvedCandidateType === 'WORKING_PROFESSIONAL' ? (aiParsedData.working_address || '') : '',
+    };
+
+    res.json({ success: true, autofillData });
+  } catch (error) {
+    console.error('Autofill error:', error);
+    res.status(500).json({ error: 'Failed to parse resume for autofill', details: error.message });
+  }
+};

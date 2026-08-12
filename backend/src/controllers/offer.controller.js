@@ -234,3 +234,27 @@ exports.getOfferDetails = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+/* =============================
+   GET ALL DISPATCHED OFFERS
+============================= */
+exports.getDispatchedOffers = async (req, res) => {
+  try {
+    const offers = await Offer.findAll({
+      include: [
+        {
+          model: Application,
+          as: 'application',
+          include: [
+            { model: Candidate, include: [User] },
+            Job
+          ]
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+    res.json({ success: true, data: offers });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};

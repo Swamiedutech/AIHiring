@@ -338,6 +338,9 @@ exports.uploadResume = async (req, res) => {
             return isNaN(parsed) ? fallback : parsed;
           };
 
+          const resolvedCandidateType = aiParsedData.candidate_type || (safeInt(aiParsedData.experience_years, 0) === 0 ? 'FRESHER' : 'WORKING_PROFESSIONAL');
+          const cgpaFromAI = firstEdu?.cgpa ? parseFloat(firstEdu.cgpa) : null;
+
           await candidate.update({
             experience_years: aiParsedData.experience_years !== undefined ? safeInt(aiParsedData.experience_years, candidate.experience_years) : candidate.experience_years,
             skills: aiParsedData.skills ? (Array.isArray(aiParsedData.skills) ? aiParsedData.skills : Object.values(aiParsedData.skills).flat()) : candidate.skills,
@@ -346,7 +349,14 @@ exports.uploadResume = async (req, res) => {
             year_of_passout: firstEdu?.year_of_passout ? safeInt(firstEdu.year_of_passout, candidate.year_of_passout) : candidate.year_of_passout,
             phone: aiParsedData.contact_info?.phone || candidate.phone,
             summary: aiParsedData.summary || candidate.summary,
-            candidate_type: aiParsedData.candidate_type || (aiParsedData.experience_years === 0 ? 'FRESHER' : 'WORKING_PROFESSIONAL') || candidate.candidate_type
+            candidate_type: resolvedCandidateType || candidate.candidate_type,
+            // New autofill fields
+            location: aiParsedData.location || candidate.location,
+            cgpa: cgpaFromAI || candidate.cgpa,
+            domain: aiParsedData.domain || candidate.domain,
+            area_of_interest: resolvedCandidateType === 'FRESHER' ? (aiParsedData.area_of_interest || candidate.area_of_interest) : candidate.area_of_interest,
+            current_company: resolvedCandidateType === 'WORKING_PROFESSIONAL' ? (aiParsedData.current_company || candidate.current_company) : null,
+            working_address: resolvedCandidateType === 'WORKING_PROFESSIONAL' ? (aiParsedData.working_address || candidate.working_address) : null,
           });
         }
 
@@ -358,6 +368,9 @@ exports.uploadResume = async (req, res) => {
       logger.error(`[Resume AI] AI processing failed: ${aiError.message}`);
     }
 
+    // Reload candidate to get the latest saved state
+    if (candidate) await candidate.reload();
+
     return res.status(200).json({
       success: true,
       data: {
@@ -366,6 +379,22 @@ exports.uploadResume = async (req, res) => {
         aiAnalysisSummary: aiAnalysisSummary ? {
           score: aiAnalysisSummary.overall_score,
           summary: aiAnalysisSummary.summary
+        } : null,
+        autofillData: candidate ? {
+          education: candidate.education,
+          specialization: candidate.specialization,
+          experience_years: candidate.experience_years,
+          phone: candidate.phone,
+          location: candidate.location,
+          skills: candidate.skills,
+          cgpa: candidate.cgpa,
+          year_of_passout: candidate.year_of_passout,
+          summary: candidate.summary,
+          candidate_type: candidate.candidate_type,
+          domain: candidate.domain,
+          area_of_interest: candidate.area_of_interest,
+          current_company: candidate.current_company,
+          working_address: candidate.working_address,
         } : null
       },
     });

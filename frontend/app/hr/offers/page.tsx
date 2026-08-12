@@ -71,6 +71,11 @@ export default function OffersCommunicationsPage() {
     queryFn: () => hrApi.getOfferTemplates().then(r => r.data.templates || []),
   });
 
+  const { data: dispatchedOffers = [], isLoading: loadingOffers } = useQuery({
+    queryKey: ["dispatched-offers"],
+    queryFn: () => hrApi.getDispatchedOffers().then(r => r.data.data || []),
+  });
+
   const createOfferMutation = useMutation({
     mutationFn: (data: object) => hrApi.createOffer(data),
     onSuccess: () => {
@@ -288,10 +293,58 @@ export default function OffersCommunicationsPage() {
             </div>
           </div>
         ) : (
-          <div className="text-center py-32 border-border/40 rounded-lg">
-            <Clock className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
-            <h3 className="text-lg font-black text-foreground uppercase tracking-widest">No Dispatched Items</h3>
-            <p className="text-xs text-muted-foreground mt-2 font-medium uppercase tracking-widest">Log of sent offers and emails will appear here.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {loadingOffers ? (
+              <div className="col-span-2 text-center py-20">
+                <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">Loading Dispatched Offers...</p>
+              </div>
+            ) : dispatchedOffers.length === 0 ? (
+              <div className="col-span-2 text-center py-32 border-border/40 rounded-lg">
+                <Clock className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                <h3 className="text-lg font-black text-foreground uppercase tracking-widest">No Dispatched Items</h3>
+                <p className="text-xs text-muted-foreground mt-2 font-medium uppercase tracking-widest">Log of sent offers and emails will appear here.</p>
+              </div>
+            ) : (
+              dispatchedOffers.map((offer: any) => (
+                <Card key={offer.id} className="border-border/40 hover:shadow-sm transition-all duration-300 rounded-lg overflow-hidden flex flex-col">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 rounded-xl border border-border/50 bg-emerald-500/10 text-emerald-500">
+                          <CheckCircle2 className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-[12px] font-black text-foreground uppercase tracking-tight">
+                            {offer.application?.Candidate?.User?.name || "Unknown Candidate"}
+                          </h3>
+                          <Badge variant="outline" className="text-[8px] font-black uppercase border-border/30 mt-1 text-emerald-500">
+                            {offer.status || "DISPATCHED"}
+                          </Badge>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-bold text-muted-foreground bg-muted/20 px-2 py-1 rounded-lg">
+                        {new Date(offer.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <div className="space-y-2 mt-4 text-[11px] font-medium text-muted-foreground">
+                      <div className="flex justify-between p-2 bg-muted/20 rounded-lg">
+                        <span>Role</span>
+                        <span className="text-foreground font-bold">{offer.position_title || "Role"}</span>
+                      </div>
+                      <div className="flex justify-between p-2 bg-muted/20 rounded-lg">
+                        <span>CTC</span>
+                        <span className="text-foreground font-bold">₹ {offer.salary?.toLocaleString() || "TBD"}</span>
+                      </div>
+                      <div className="flex justify-between p-2 bg-muted/20 rounded-lg">
+                        <span>Joining Date</span>
+                        <span className="text-foreground font-bold">{new Date(offer.joining_date).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         )}
 

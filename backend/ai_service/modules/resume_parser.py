@@ -178,6 +178,11 @@ class ResumeParser:
                 'languages': self._extract_languages(raw_text),
                 'highest_qualification': highest_qual,
                 'candidate_type': candidate_type or ('FRESHER' if total_exp_years == 0 else 'WORKING_PROFESSIONAL'),
+                'location': parsed_data.get('location'),
+                'domain': parsed_data.get('domain'),
+                'area_of_interest': parsed_data.get('area_of_interest'),
+                'current_company': parsed_data.get('current_company'),
+                'working_address': parsed_data.get('working_address')
             }
             
             return result
@@ -210,7 +215,17 @@ IMPORTANT: Score the candidate SPECIFICALLY against this role. Strengths and wea
 Provide the following in JSON format (ensure exactly 5 strengths and 5 weaknesses are provided).
 CRITICAL: DO NOT use any markdown formatting like asterisks (**) or bolding in the text. Return plain text only.
 If a job role is specified above, make ALL insights role-specific and relevant to that role.
+
+CRITICAL RULES:
+- If candidate has NO work experience of any kind, set experience_years=0 and candidate_type=FRESHER
+- If candidate has ANY work experience (including internships, part-time, or full-time roles), set candidate_type=WORKING_PROFESSIONAL and extract current_company (or most recent internship company)
+- If experience is less than 1 year (e.g. short internships), set experience_years=1 (minimum for professionals)
+- If highest_qualification cannot be found, set it to null (do not guess)
+- Extract CGPA/GPA/percentage from education section if available
+- Extract location/city from contact or address info if available
+
 {{
+    "contact_info": {{ "email": "", "phone": "", "name": "" }},
     "summary": "Brief summary of candidate's fit for the role",
     "strengths": ["Role-specific strength 1", "Role-specific strength 2", "Role-specific strength 3", "Role-specific strength 4", "Role-specific strength 5"],
     "weaknesses": ["Role-specific weakness 1", "Role-specific weakness 2", "Role-specific weakness 3", "Role-specific weakness 4", "Role-specific weakness 5"],
@@ -219,7 +234,13 @@ If a job role is specified above, make ALL insights role-specific and relevant t
     "key_insights": ["insight1", "insight2", ...],
     "role_fit": {{"technical_fit": 0-100, "cultural_fit": 0-100}},
     "experience_years": 0,
-    "highest_qualification": "degree name or null",
+    "highest_qualification": "degree name e.g. B.Tech in CS or null",
+    "education": [{{ "degree": "", "specialization": "", "institution": "", "year_of_passout": "", "cgpa": null }}],
+    "location": "City, State extracted from resume or null",
+    "domain": "Primary professional domain e.g. Software Engineering, Marketing, Data Science, Mechanical Engineering or null",
+    "area_of_interest": "For freshers: research interests or project focus areas or null",
+    "current_company": "Most recent employer name if working professional, else null",
+    "working_address": "Office/work location from resume if mentioned, else null",
     "candidate_type": "FRESHER or WORKING_PROFESSIONAL"
 }}"""
             
