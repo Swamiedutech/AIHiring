@@ -34,14 +34,18 @@ console.log("✅ scoring.routes loaded");
 const app = express();
 
 /* ================= MIDDLEWARE ================= */
-const ALLOWED_ORIGINS = ["http://localhost:3000", "http://localhost:5173"];
+const ALLOWED_ORIGINS = process.env.CORS_ORIGINS 
+  ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
+  : ["http://localhost:3000", "http://localhost:5173"];
+
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
 app.use(helmet({
   crossOriginResourcePolicy: false, // Allows frontend to load images/PDFs from backend
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      frameAncestors: ["'self'", "http://localhost:3000", "http://localhost:5173"],
+      frameAncestors: ["'self'", FRONTEND_URL, ...ALLOWED_ORIGINS],
     },
   },
   xFrameOptions: false, // Disabled in favor of CSP frameAncestors

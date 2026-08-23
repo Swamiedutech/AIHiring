@@ -52,9 +52,9 @@ exports.startAssessment = async (req, res) => {
       transaction 
     });
 
-    if (attempt && attempt.status === 'SUBMITTED') {
+    if (attempt && (attempt.status === 'SUBMITTED' || attempt.status === 'EVALUATED')) {
       await transaction.rollback();
-      return res.status(400).json({ error: 'Assessment already submitted' });
+      return res.status(400).json({ error: 'Assessment already completed and cannot be restarted' });
     }
 
     // --- SECTION 1: Fetch 20 MCQ questions ---
@@ -135,7 +135,8 @@ exports.startAssessment = async (req, res) => {
     };
 
     if (attempt) {
-      await attempt.update(attemptData, { transaction });
+      // Do not overwrite existing attempt if it's already IN_PROGRESS to prevent getting fresh questions
+      // Just return the existing attempt config and questions later
     } else {
       attempt = await AssessmentAttempt.create(attemptData, { transaction });
     }
@@ -190,7 +191,17 @@ exports.saveAnswer = async (req, res) => {
     const { question_id, answer_text, section } = req.body;
 
     const attempt = await AssessmentAttempt.findByPk(attemptId);
-    if (!attempt) return res.status(404).json({ message: "Attempt not found" });
+    if (!attempt || attempt.status !== 'IN_PROGRESS') return res.status(400).json({ message: "Invalid attempt" });
+
+    // Enforce Timer
+    const timeLimitMinutes = attempt.metadata?.config?.TOTAL_DURATION_MINUTES || ASSESSMENT_CONFIG.TOTAL_DURATION_MINUTES;
+    const timeLimitMs = (timeLimitMinutes + 2) * 60 * 1000; // 2 minutes grace period
+    const timeTakenMs = new Date() - new Date(attempt.started_at);
+    if (timeTakenMs > timeLimitMs) {
+      // Auto-submit if time exceeded
+      await attempt.update({ status: 'SUBMITTED', submitted_at: new Date() });
+      return res.status(400).json({ error: 'Assessment time limit exceeded. Exam auto-submitted.' });
+    }
 
     const currentAnswers = attempt.answers || {};
     currentAnswers[question_id] = { answer_text, section: section || 1, timestamp: new Date() };
@@ -213,7 +224,16 @@ exports.saveAllAnswers = async (req, res) => {
     }
 
     const attempt = await AssessmentAttempt.findByPk(attemptId);
-    if (!attempt) return res.status(404).json({ message: "Attempt not found" });
+    if (!attempt || attempt.status !== 'IN_PROGRESS') return res.status(400).json({ message: "Invalid attempt" });
+
+    // Enforce Timer
+    const timeLimitMinutes = attempt.metadata?.config?.TOTAL_DURATION_MINUTES || ASSESSMENT_CONFIG.TOTAL_DURATION_MINUTES;
+    const timeLimitMs = (timeLimitMinutes + 2) * 60 * 1000; // 2 minutes grace period
+    const timeTakenMs = new Date() - new Date(attempt.started_at);
+    if (timeTakenMs > timeLimitMs) {
+      await attempt.update({ status: 'SUBMITTED', submitted_at: new Date() });
+      return res.status(400).json({ error: 'Assessment time limit exceeded. Exam auto-submitted.' });
+    }
 
     // Merge with existing answers (don't overwrite answers from other section)
     const existing = attempt.answers || {};
@@ -244,6 +264,15 @@ exports.submitAssessment = async (req, res) => {
     const attempt = await AssessmentAttempt.findByPk(attemptId, { include: [{ model: Application }] });
     if (!attempt || attempt.status !== 'IN_PROGRESS') {
       return res.status(400).json({ error: 'Invalid attempt' });
+    }
+
+    // Enforce Timer on Submit
+    const timeLimitMinutes = attempt.metadata?.config?.TOTAL_DURATION_MINUTES || ASSESSMENT_CONFIG.TOTAL_DURATION_MINUTES;
+    const timeLimitMs = (timeLimitMinutes + 2) * 60 * 1000;
+    const timeTakenMs = new Date() - new Date(attempt.started_at);
+    if (timeTakenMs > timeLimitMs) {
+      // Allow it to submit, but log it or reject. Since it's a submit action, we should just let it submit.
+      logger.warn(`Attempt ${attemptId} submitted late (${timeTakenMs}ms). Time limit was ${timeLimitMs}ms.`);
     }
 
     await attempt.update({ status: 'SUBMITTED', submitted_at: new Date() });

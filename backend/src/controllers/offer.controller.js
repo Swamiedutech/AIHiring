@@ -158,6 +158,10 @@ exports.respondOffer = async (req, res) => {
       return res.status(404).json({ message: "Offer record not found" });
     }
 
+    if (req.candidate && offer.application && offer.application.candidate_id !== req.candidate.id) {
+      return res.status(403).json({ message: "You are not authorized to respond to this offer" });
+    }
+
     // Validate decision input
     const validDecisions = ["ACCEPTED", "REJECTED"];
     if (!validDecisions.includes(decision)) {
@@ -227,6 +231,10 @@ exports.getOfferDetails = async (req, res) => {
     
     if (!offer) {
       return res.status(404).json({ message: "Offer record not found" });
+    }
+
+    if (req.candidate && offer.application && offer.application.candidate_id !== req.candidate.id) {
+      return res.status(403).json({ message: "You are not authorized to view this offer" });
     }
     
     res.json({ offer });
