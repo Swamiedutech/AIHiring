@@ -425,14 +425,16 @@ class ProctoringController {
   static async endProctoredAssessment(req, res) {
     try {
       const { sessionId } = req.params;
-      const { assessmentScore } = req.body;
+      const candidateId = req.candidate?.id;
 
-      const attempt = await AssessmentAttempt.findByPk(sessionId);
+      const attempt = await AssessmentAttempt.findByPk(sessionId, {
+        include: [{ model: Application }]
+      });
 
-      if (!attempt) {
-        return res.status(404).json({
+      if (!attempt || (candidateId && attempt.Application.candidate_id !== candidateId)) {
+        return res.status(403).json({
           success: false,
-          message: 'Session not found'
+          message: 'Unauthorized or session not found'
         });
       }
 
@@ -447,10 +449,13 @@ class ProctoringController {
       proctoringData.recommendedAction = integrityReport.recommendedAction;
       proctoringData.endTime = new Date();
 
+      // Retrieve actual score rather than trusting client
+      const actualScore = attempt.final_score || attempt.score || 0;
+
       await attempt.update({
         status: 'SUBMITTED',
         submitted_at: new Date(),
-        score: assessmentScore,
+        score: actualScore,
         anti_cheating_data: proctoringData
       });
 
@@ -463,7 +468,7 @@ class ProctoringController {
       });
 
       let finalStatus = 'TECHNICAL_ROUND_COMPLETED';
-      let finalScore = assessmentScore;
+      let finalScore = actualScore;
 
       const shouldInvestigate = proctoringData.integrityScore < 70 || proctoringData.suspiciousActivityScore > 40;
 
@@ -475,7 +480,7 @@ class ProctoringController {
 
       // Keep as completed even with violations, HR will review the flags
       finalStatus = 'TECHNICAL_ROUND_COMPLETED';
-      finalScore = assessmentScore;
+      finalScore = actualScore;
 
       await application.update({
         status: finalStatus,

@@ -1,7 +1,7 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-  return sequelize.define("User", {
+  const User = sequelize.define("User", {
     id: {
       type: DataTypes.INTEGER,
       autoIncrement: true,
@@ -64,4 +64,15 @@ module.exports = (sequelize) => {
     createdAt: 'created_at',
     updatedAt: 'updated_at'
   });
+
+  User.prototype.toJSON = function () {
+    let values = Object.assign({}, this.get());
+    delete values.password;
+    delete values.otp;
+    delete values.otp_expires_at;
+    delete values.auth_token_revision;
+    return values;
+  };
+
+  return User;
 };
