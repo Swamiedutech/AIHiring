@@ -1,6 +1,6 @@
 const axios = require("axios");
 
-const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MzEsImVtYWlsIjoiaHJAdGVzdC5jb20iLCJyb2xlIjoiSFIiLCJpYXQiOjE3NzY2MjcxNjAsImV4cCI6MTc3NjYzMDc2MH0.7IRc7WjTgDWmWf0vCTidmGP384Fvb4vv7swJMdQLnFw";
+const TOKEN = "dummy-token-for-testing";
 const API_BASE = "http://localhost:5000/api";
 
 async function run() {

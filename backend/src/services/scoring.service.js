@@ -172,8 +172,8 @@ class ScoringService {
                   (interviewScore * weights.interview) + 
                   (Math.min(malpracticeScore, 10) * weights.malpractice);
 
-    // Normalize to 100
-    mlScore = Math.max(0, Math.min(100, (mlScore / 10.5) * 100)); 
+    // Normalize to 100 (Max weighted score is ~105, not 10.5)
+    mlScore = Math.max(0, Math.min(100, (mlScore / 105) * 100)); 
 
     // 2. Hybrid Logic Implementation
     let finalScore;

@@ -1,7 +1,7 @@
 const axios = require("axios");
 const { AssessmentAttempt, Application } = require("../src/models");
 
-const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MzAsImVtYWlsIjoidmFsaWRhdG9yX2NhbmRpZGF0ZUB0ZXN0LmNvbSIsInJvbGUiOiJDQU5ESURBVEUiLCJpYXQiOjE3NzY2MjYxMjgsImV4cCI6MTc3NjYyOTcyOH0.weZDIMQbFTpT-40iwcQf5DUyNmfI5OnWOQXMzypLojE";
+const TOKEN = "dummy-token-for-testing";
 const APPLICATION_ID = 9999;
 const API_BASE = "http://localhost:5000/api";
 

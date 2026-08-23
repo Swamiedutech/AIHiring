@@ -42,6 +42,33 @@ exports.register = async (req, res) => {
 
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
+      // If the user exists but hasn't verified their email, allow them to "re-register"
+      // to generate a new OTP and update their password/name.
+      if (existingUser.role === "CANDIDATE") {
+        const existingCandidate = await Candidate.findOne({ where: { user_id: existingUser.id } });
+        if (existingCandidate && !existingCandidate.email_verified) {
+          const hashedPassword = await bcrypt.hash(password, 10);
+          await existingUser.update({ name, password: hashedPassword });
+          
+          const otp = Math.floor(100000 + Math.random() * 900000).toString();
+          await existingCandidate.update({
+            otp,
+            otp_expires_at: new Date(Date.now() + 10 * 60 * 1000)
+          });
+          
+          try {
+            await sendOTPEmail(email, otp);
+          } catch (err) {
+            console.log(`⚠️ Email sending failed. [DEV MODE] Your OTP is: ${otp}`);
+          }
+          
+          return res.status(201).json({
+            message: "Registered successfully. Please verify your email.",
+            requiresOTP: true,
+            email
+          });
+        }
+      }
       return res.status(400).json({ message: "User already exists" });
     }
 
@@ -70,8 +97,7 @@ exports.register = async (req, res) => {
       try {
         await sendOTPEmail(email, otp);
       } catch (err) {
-        console.log("⚠️ Email sending failed");
-        
+        console.log(`⚠️ Email sending failed. [DEV MODE] Your OTP is: ${otp}`);
       }
     }
 

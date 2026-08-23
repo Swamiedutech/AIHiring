@@ -167,6 +167,13 @@ module.exports = (sequelize) => {
       comment: 'Work address'
     },
 
+    internships: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: [],
+      comment: 'Timeline of internships/experiences'
+    },
+
   }, {
     tableName: "Candidates",
     timestamps: true,

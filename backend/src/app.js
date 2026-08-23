@@ -1,6 +1,9 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const helmet = require("helmet");
+const { authLimiter, aiLimiter, generalLimiter } = require("./middleware/rateLimiter.middleware");
+const { globalErrorHandler, notFoundHandler } = require("./middleware/errorHandler.middleware");
 
 const authRoutes = require("./routes/auth.routes");
 const jobRoutes = require("./routes/job.routes");
@@ -32,6 +35,18 @@ const app = express();
 
 /* ================= MIDDLEWARE ================= */
 const ALLOWED_ORIGINS = ["http://localhost:3000", "http://localhost:5173"];
+
+app.use(helmet({
+  crossOriginResourcePolicy: false, // Allows frontend to load images/PDFs from backend
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      frameAncestors: ["'self'", "http://localhost:3000", "http://localhost:5173"],
+    },
+  },
+  xFrameOptions: false, // Disabled in favor of CSP frameAncestors
+}));
+app.use(generalLimiter);
 
 app.use(
   cors({
@@ -68,7 +83,7 @@ app.use((req, res, next) => {
   next();
 });
 /* ================= ROUTES ================= */
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/jobs", jobRoutes);
 app.use("/api/applications", applicationRoutes);
 app.use("/api/resume", resumeRoutes);
@@ -87,10 +102,14 @@ app.use("/api/malpractice", malpracticeRoutes);
 app.use("/api/offer", offerRoutes);
 app.use("/api/proctoring", proctoringRoutes);
 app.use("/api/md", mdRoutes);
-app.use("/api/ai", aiRoutes); // 🔥 AI Analysis Pipeline
+app.use("/api/ai", aiLimiter, aiRoutes); // 🔥 AI Analysis Pipeline
 app.use("/api/score", scoringRoutes); // 🔥 Standalone Scoring Engine
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/hr/ai-insights", aiInsightsRoutes);
 app.use("/api/hr/talent-pool", talentPoolRoutes);
+
+// Error Handling (Must be last)
+app.use(notFoundHandler);
+app.use(globalErrorHandler);
 
 module.exports = app;

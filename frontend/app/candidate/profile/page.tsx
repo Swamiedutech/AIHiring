@@ -12,7 +12,7 @@ import {
   Mail, Phone, MapPin, GraduationCap, Briefcase,
   Calendar, Save, Loader2, X, Sparkles, Search,
   FileText, Camera, CheckCircle2, Star, Plus, PenTool, ShieldCheck,
-  Download, ExternalLink, RefreshCw
+  Download, ExternalLink, RefreshCw, Clock, Building
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUIStore } from "@/lib/store";
@@ -49,6 +49,7 @@ export default function CandidateProfilePage() {
     area_of_interest: "",
     current_company: "",
     working_address: "",
+    internships: [] as any[],
   });
 
   const resetFormFromData = () => {
@@ -69,6 +70,7 @@ export default function CandidateProfilePage() {
         area_of_interest: c.area_of_interest || "",
         current_company: c.current_company || "",
         working_address: c.working_address || "",
+        internships: c.internships || [],
       });
     }
   };
@@ -122,6 +124,7 @@ export default function CandidateProfilePage() {
       area_of_interest: autofillData.area_of_interest || f.area_of_interest,
       current_company: autofillData.current_company || f.current_company,
       working_address: autofillData.working_address || f.working_address,
+      internships: autofillData.internships || f.internships,
     }));
   };
 
@@ -447,6 +450,46 @@ export default function CandidateProfilePage() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+        {/* Experience Timeline */}
+        {form.internships && form.internships.length > 0 && (
+          <Card className="lg:col-span-5 border-none shadow-sm rounded-xl bg-white p-6">
+            <div className="flex items-center gap-3 mb-8">
+              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600"><Clock className="w-6 h-6" /></div>
+              <h4 className="text-xl font-bold">Experience Timeline</h4>
+            </div>
+            
+            <div className="relative pl-6 space-y-8 border-l-2 border-slate-100 ml-4">
+              {form.internships.map((exp, idx) => (
+                <div key={idx} className="relative group">
+                  {/* Timeline Dot */}
+                  <div className="absolute -left-[31px] top-1 w-4 h-4 bg-white border-2 border-blue-500 rounded-full group-hover:bg-blue-500 transition-colors shadow-sm" />
+                  
+                  <div className="bg-slate-50 rounded-xl p-5 border border-slate-100 hover:border-blue-200 transition-colors">
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-2 mb-3">
+                      <div>
+                        <h5 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                          {exp.title}
+                        </h5>
+                        <div className="flex items-center gap-4 text-sm font-medium text-slate-500 mt-1">
+                          <span className="flex items-center gap-1"><Building className="w-4 h-4 text-slate-400" /> {exp.company}</span>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="bg-white border-slate-200 text-slate-600 font-bold px-3 py-1 w-max">
+                        {exp.duration || "Duration Not Specified"}
+                      </Badge>
+                    </div>
+                    {exp.description && (
+                      <p className="text-sm text-slate-600 leading-relaxed font-medium mt-3 border-t border-slate-200/60 pt-3">
+                        {exp.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
         {/* Skills Section */}
         <Card className="lg:col-span-3 border-none shadow-sm rounded-xl bg-white p-5">
           <div className="flex items-center justify-between mb-8">

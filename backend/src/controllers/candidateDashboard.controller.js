@@ -80,6 +80,7 @@ exports.getDashboardOverview = async (req, res) => {
         area_of_interest: candidate.area_of_interest || null,
         current_company: candidate.current_company || null,
         working_address: candidate.working_address || null,
+        internships: candidate.internships || [],
       },
       applications: applications.map(app => ({
         _id: String(app.id),
@@ -146,7 +147,8 @@ exports.updateCandidateProfile = async (req, res) => {
       domain,
       area_of_interest,
       current_company,
-      working_address
+      working_address,
+      internships
     } = req.body;
 
     // Update only provided fields
@@ -172,6 +174,7 @@ exports.updateCandidateProfile = async (req, res) => {
     if (area_of_interest !== undefined) candidate.area_of_interest = area_of_interest;
     if (current_company !== undefined) candidate.current_company = current_company;
     if (working_address !== undefined) candidate.working_address = working_address;
+    if (internships !== undefined) candidate.internships = internships;
 
     // When switching to FRESHER, clear professional fields
     if (candidate.candidate_type === 'FRESHER') {
@@ -204,6 +207,7 @@ exports.updateCandidateProfile = async (req, res) => {
         area_of_interest: candidate.area_of_interest,
         current_company: candidate.current_company,
         working_address: candidate.working_address,
+        internships: candidate.internships,
       }
     });
 
@@ -551,6 +555,7 @@ exports.autofillFromResume = async (req, res) => {
       area_of_interest: resolvedCandidateType === 'FRESHER' ? (aiParsedData.area_of_interest || '') : '',
       current_company: resolvedCandidateType === 'WORKING_PROFESSIONAL' ? (aiParsedData.current_company || '') : '',
       working_address: resolvedCandidateType === 'WORKING_PROFESSIONAL' ? (aiParsedData.working_address || '') : '',
+      internships: aiParsedData.experience_timeline || [],
     };
 
     res.json({ success: true, autofillData });

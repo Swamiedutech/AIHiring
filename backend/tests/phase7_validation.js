@@ -1,6 +1,6 @@
 const axios = require("axios");
 
-const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MzEsImVtYWlsIjoiaHJAdGVzdC5jb20iLCJyb2xlIjoiSFIiLCJpYXQiOjE3NzY2MjgwNTcsImV4cCI6MTc3NjYzMTY1N30.gbMvVm84z5HaZtPL2w_dZcZH105arimodEa8n-yCY6E";
+const TOKEN = "dummy-token-for-testing";
 // Using the same HR token (HR role is enough for these MD routes too)
 // Actually MD usually has its own role, but HR is in the allowedRoles for these routes.
 

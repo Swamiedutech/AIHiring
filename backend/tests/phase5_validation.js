@@ -2,7 +2,7 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 
-const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MzEsImVtYWlsIjoiaHJAdGVzdC5jb20iLCJyb2xlIjoiSFIiLCJpYXQiOjE3NzY2MjcxNjAsImV4cCI6MTc3NjYzMDc2MH0.7IRc7WjTgDWmWf0vCTidmGP384Fvb4vv7swJMdQLnFw";
+const TOKEN = "dummy-token-for-testing";
 const APPLICATION_ID = 9999;
 const API_BASE = "http://localhost:5000/api";
 

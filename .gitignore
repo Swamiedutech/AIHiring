@@ -43,6 +43,7 @@ desktop.ini
 
 # ========== UPLOADS (user data) ==========
 uploads/
+backend/ai_service/resumes/
 
 # ========== MISC ==========
 *.tsbuildinfo

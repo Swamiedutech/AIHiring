@@ -42,9 +42,30 @@ export default function CandidateDashboard() {
   const latestApp = apps[0];
   const appStatus = latestApp?.status?.toUpperCase() || "NONE";
 
+  const calculateProfileCompletion = () => {
+    const candidate = (overview as any)?.candidate;
+    if (!candidate) return 10; // Base 10% for registering
+    
+    const fields = [
+      candidate.phone,
+      candidate.location,
+      candidate.education && candidate.education !== "Not Provided",
+      candidate.specialization && candidate.specialization !== "Not Provided",
+      candidate.skills && candidate.skills.length > 0,
+      candidate.summary,
+      candidate.resume_path,
+      candidate.profile_image_path
+    ];
+    
+    const filled = fields.filter(f => !!f).length;
+    return Math.min(100, 20 + (filled * 10));
+  };
+
+  const completionPercentage = calculateProfileCompletion();
+
   const getStepStatus = (index: number) => {
     // 0: Profile Setup, 1: Application Review, 2: Skills Assessment, 3: Technical Interview, 4: Final Offer
-    if (index === 0) return "completed";
+    if (index === 0) return completionPercentage === 100 ? "completed" : "current";
 
     const statusMap: Record<string, number> = {
       // Step 1: Application Review / Screening
@@ -103,10 +124,12 @@ export default function CandidateDashboard() {
   const nextSteps = [
     {
       label: "Profile Setup",
-      date: "Completed",
+      date: completionPercentage === 100 ? "Completed" : "In Progress",
       status: getStepStatus(0),
       icon: User,
-      desc: "Your professional profile is 100% complete."
+      desc: completionPercentage === 100 
+        ? "Your professional profile is 100% complete." 
+        : `Your profile is ${completionPercentage}% complete. Update it now.`
     },
     {
       label: "Application Review",
