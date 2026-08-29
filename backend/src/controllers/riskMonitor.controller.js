@@ -1,5 +1,6 @@
 const { Candidate, User, Application, Job, MalpracticeEvent, AssessmentAttempt } = require('../models');
 const { Op } = require('sequelize');
+const { buildAssetUrl } = require('../utils/urlHelper');
 
 class RiskMonitorController {
   /**
@@ -145,7 +146,7 @@ class RiskMonitorController {
           riskLevel: level,
           lastUpdate: firstApp?.updated_at || new Date(),
           status: level === "High" ? "Action Required" : "Monitoring",
-          profileImage: c.profile_image_path ? `http://localhost:5000${c.profile_image_path.startsWith('/') ? '' : '/'}${c.profile_image_path}` : null
+          profileImage: buildAssetUrl(c.profile_image_path)
         };
       });
 

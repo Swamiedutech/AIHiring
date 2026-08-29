@@ -16,6 +16,7 @@ const {
   AssessmentAttempt
 } = require('../models');
 const logger = require('../utils/logger');
+const { buildAssetUrl } = require('../utils/urlHelper');
 
 /**
  * ==================== RESUME OPERATIONS ====================
@@ -1156,7 +1157,7 @@ exports.getAIAnalysis = async (req, res) => {
           title: application.Job.title || 'N/A',
           department: application.Job.department || 'N/A'
         } : null,
-        resume_url: application?.resume_url ? `http://localhost:5000${application.resume_url}` : (application?.Candidate?.resume_path ? `http://localhost:5000${application.Candidate.resume_path}` : null),
+        resume_url: buildAssetUrl(application?.resume_url) || buildAssetUrl(application?.Candidate?.resume_path),
         resume_analysis: resumeAnalysis ? {
           ...resumeAnalysis.get({ plain: true }),
           contact_info: {

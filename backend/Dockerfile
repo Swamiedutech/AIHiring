@@ -22,6 +22,7 @@ EXPOSE 5000
 # Set environment variables (fallbacks)
 ENV NODE_ENV=production
 ENV PORT=5000
+ENV BACKEND_URL=http://localhost:5000
 
 # Start the application
 CMD ["node", "src/server.js"]

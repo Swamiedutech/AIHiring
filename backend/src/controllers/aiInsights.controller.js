@@ -2,6 +2,7 @@ const { Application, Job, Candidate, User, AssessmentAttempt, InterviewSession }
 const { Op, Sequelize } = require('sequelize');
 const aiService = require('../services/ai.service');
 const PDFDocument = require('pdfkit');
+const { buildAssetUrl } = require('../utils/urlHelper');
 
 class AIInsightsController {
   /**
@@ -253,7 +254,7 @@ class AIInsightsController {
     return uniqueCandidates.map(app => {
       const profilePath = app.Candidate?.profile_image_path;
       const fullImageUrl = profilePath 
-        ? `http://localhost:5000${profilePath.startsWith('/') ? '' : '/'}${profilePath}`
+        ? buildAssetUrl(profilePath)
         : `/images/default-avatar.png`;
         
       return {

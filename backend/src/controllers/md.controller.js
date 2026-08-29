@@ -10,6 +10,7 @@ const {
   Notification,
   ResumeAnalysis
 } = require("../models");
+const { buildAssetUrl } = require('../utils/urlHelper');
 
 // 🔥 AI Recommendation Logic
 function getRecommendation(score, malpracticeScore) {
@@ -95,7 +96,7 @@ exports.getMDApplications = async (req, res) => {
         applicationId: app.id,
         candidateName: app.Candidate?.User?.name || 'Unknown',
         candidateEmail: app.Candidate?.User?.email || '',
-        profileImage: app.Candidate?.profile_image_path ? `http://localhost:5000${app.Candidate.profile_image_path.startsWith('/') ? '' : '/'}${app.Candidate.profile_image_path}` : null,
+        profileImage: buildAssetUrl(app.Candidate?.profile_image_path),
         jobTitle: app.Job?.title || 'N/A',
         department: app.Job?.department || '',
         aiScore: app.overall_score || 0,

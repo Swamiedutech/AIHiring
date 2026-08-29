@@ -11,6 +11,7 @@ const {
   InterviewSession
 } = require("../models");
 const emailService = require("../services/email.service");
+const { buildAssetUrl } = require('../utils/urlHelper');
 
 /* =============================
    GET ALL APPLICATIONS
@@ -106,7 +107,7 @@ exports.getAllApplications = async (req, res) => {
           _id: String(j.Candidate.id),
           name: j.Candidate.User?.name,
           email: j.Candidate.User?.email,
-          profileImage: j.Candidate.profile_image_path ? `http://localhost:5000${j.Candidate.profile_image_path.startsWith('/') ? '' : '/'}${j.Candidate.profile_image_path}` : null,
+          profileImage: buildAssetUrl(j.Candidate.profile_image_path),
         } : j.candidate_id,
         jobId: j.Job ? {
           _id: String(j.Job.id),
@@ -217,7 +218,7 @@ exports.getAssessmentStats = async (req, res) => {
           score: act.final_score ? `${act.final_score}%` : null,
           time: act.created_at,
           img: act.Application?.Candidate?.profile_image_path 
-            ? `http://localhost:5000/${act.Application.Candidate.profile_image_path}` 
+            ? buildAssetUrl(act.Application.Candidate.profile_image_path)
             : `/images/default-avatar.png`
         })),
         performanceData
@@ -923,7 +924,7 @@ exports.getInterviewStats = async (req, res) => {
           name: h.Application?.Candidate?.User?.name || 'Candidate',
           insight: h.ai_analysis?.overall_feedback || "Demonstrated strong technical potential and cultural alignment.",
           img: h.Application?.Candidate?.profile_image_path 
-            ? `http://localhost:5000/${h.Application.Candidate.profile_image_path}` 
+            ? buildAssetUrl(h.Application.Candidate.profile_image_path)
             : `/images/default-avatar.png`
         }))
       }
@@ -967,7 +968,7 @@ exports.getInterviewsList = async (req, res) => {
       status: i.status,
       score: i.overall_score || '-',
       recommendation: i.hire_recommendation,
-      img: i.Application?.Candidate?.profile_image_path ? `http://localhost:5000${i.Application?.Candidate?.profile_image_path.startsWith('/') ? '' : '/'}${i.Application?.Candidate?.profile_image_path}` : "/images/default-avatar.png"
+      img: buildAssetUrl(i.Application?.Candidate?.profile_image_path, "/images/default-avatar.png")
     }));
 
     res.json({

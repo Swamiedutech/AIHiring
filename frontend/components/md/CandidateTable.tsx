@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import api from "@/lib/api";
+import api, { BACKEND_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -278,7 +278,7 @@ export default function CandidateTable({ apps = [], refresh }: any) {
                         <div className="w-14 h-14 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-sm group-hover:scale-110 transition-transform relative overflow-hidden">
                           {app.profileImage || app.candidate?.profile_image_path ? (
                             <img 
-                              src={app.profileImage || (app.candidate?.profile_image_path ? `http://localhost:5000${app.candidate.profile_image_path.startsWith('/') ? '' : '/'}${app.candidate.profile_image_path}` : '')}
+                              src={app.profileImage || (app.candidate?.profile_image_path ? `${BACKEND_URL}${app.candidate.profile_image_path.startsWith('/') ? '' : '/'}${app.candidate.profile_image_path}` : '')}
                               alt="Profile" 
                               className="w-full h-full object-cover"
                               onError={(e: any) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }}

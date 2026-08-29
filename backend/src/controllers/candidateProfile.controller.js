@@ -7,6 +7,7 @@ const {
 } = require('../models');
 const { Op } = require('sequelize');
 const { STATUS_GROUPS, computeApplicationScore, getFitBand } = require('../utils/applicationStatus.utils');
+const { buildAssetUrl } = require('../utils/urlHelper');
 
 // ── EXACT enum values from your DB (verified via pg_enum query) ───
 const ALL_STATUSES = [
@@ -294,7 +295,7 @@ class CandidateProfileController {
             year_of_passout: application.Candidate?.year_of_passout || application.year_of_passout || null,
             summary:         application.summary || application.Candidate?.summary || null,
             aiSummary:       application.Candidate?.ai_summary || null,
-            profileImage:    application.Candidate?.profile_image_path ? `http://localhost:5000${application.Candidate.profile_image_path.startsWith('/') ? '' : '/'}${application.Candidate.profile_image_path}` : "/images/default-avatar.png",
+            profileImage:    buildAssetUrl(application.Candidate?.profile_image_path, "/images/default-avatar.png"),
             // ── Fresher / Working Professional fields ──
             candidate_type:    application.Candidate?.candidate_type || null,
             domain:            application.Candidate?.domain || null,
@@ -312,7 +313,7 @@ class CandidateProfileController {
           assessment_attempts: enrichedAttempts,
           assessmentAnalysis: application.AssessmentAnalysis,
           appliedAt:        application.applied_at || application.createdAt,
-          resumeUrl:        application.resume_url ? `http://localhost:5000${application.resume_url}` : (application.Candidate?.resume_path ? `http://localhost:5000${application.Candidate.resume_path}` : null),
+          resumeUrl:        buildAssetUrl(application.resume_url) || buildAssetUrl(application.Candidate?.resume_path),
 
           aiScore:          aggregateScore,
           aiFitBand,
@@ -352,7 +353,7 @@ class CandidateProfileController {
             const firstWithVideo = questionsWithRecording[0];
             const recordingBase = session.recording_path || firstWithVideo?.recording_path;
             return {
-              videoUrl: recordingBase ? `http://localhost:5000${recordingBase}` : null,
+              videoUrl: buildAssetUrl(recordingBase),
               sessionId: session.id,
               status: session.status,
               overallScore: session.overall_score,
@@ -368,7 +369,7 @@ class CandidateProfileController {
                 confidence: ans.analysis?.confidence ? (ans.analysis.confidence > 0.7 ? 'High' : 'Medium') : 'N/A',
                 sentiment: ans.analysis?.sentiment ? (ans.analysis.sentiment > 0.6 ? 'Positive' : 'Neutral') : 'N/A',
                 responseText: ans.response_text || '',
-                recordingPath: ans.recording_path ? `http://localhost:5000${ans.recording_path}` : null,
+                recordingPath: buildAssetUrl(ans.recording_path),
                 keywords: ans.analysis?.keywords || []
               })),
               // Session-level highlights from AI analysis
@@ -480,7 +481,7 @@ class CandidateProfileController {
             experience: candidate.experience_years,
             skills: candidate.skills || [],
             summary: candidate.summary,
-            profileImage: candidate.profile_image_path ? `http://localhost:5000${candidate.profile_image_path.startsWith('/') ? '' : '/'}${candidate.profile_image_path}` : "/images/default-avatar.png",
+            profileImage: buildAssetUrl(candidate.profile_image_path, "/images/default-avatar.png"),
             // ── Fresher / Working Professional fields ──
             candidate_type:   candidate.candidate_type || null,
             domain:           candidate.domain || null,
@@ -551,7 +552,7 @@ class CandidateProfileController {
             integrityScore:    app.Candidate?.integrity_score || null,
             daysInStage, resumeScore, technicalScore: techScore, interviewScore: intScore,
             malpracticeCount:  app.MalpracticeEvents?.length || 0,
-            profileImage: app.Candidate?.profile_image_path ? `http://localhost:5000${app.Candidate.profile_image_path.startsWith('/') ? '' : '/'}${app.Candidate.profile_image_path}` : null,
+            profileImage: buildAssetUrl(app.Candidate?.profile_image_path),
           };
         });
 

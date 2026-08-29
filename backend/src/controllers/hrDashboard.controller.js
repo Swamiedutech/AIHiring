@@ -1,6 +1,7 @@
 const { Application, Candidate, User, Job, HRInternalNote } = require('../models');
 const { Op } = require('sequelize');
 const { STATUS_GROUPS } = require('../utils/applicationStatus.utils');
+const { buildAssetUrl } = require('../utils/urlHelper');
 
 class HRDashboardController {
 
@@ -401,7 +402,7 @@ class HRDashboardController {
         applicationId: app.id,
         name: app.Candidate?.User?.name || 'Unknown',
         email: app.Candidate?.User?.email || '',
-        profileImage: app.Candidate?.profile_image_path ? `http://localhost:5000/${app.Candidate.profile_image_path}` : null,
+        profileImage: buildAssetUrl(app.Candidate?.profile_image_path),
         job: app.Job?.title || 'N/A',
         department: app.Job?.department || '',
         score: app.overall_score || 0,
@@ -447,7 +448,7 @@ class HRDashboardController {
         email: app.Candidate?.User?.email || '',
         jobTitle: app.Job?.title || 'N/A',
         department: app.Job?.department || '',
-        profileImage: app.Candidate?.profile_image_path ? `http://localhost:5000/${app.Candidate.profile_image_path}` : null,
+        profileImage: buildAssetUrl(app.Candidate?.profile_image_path),
         hiredAt: app.updated_at
       }));
 

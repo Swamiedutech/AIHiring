@@ -1,6 +1,7 @@
 const { Candidate, User, Application, Job } = require('../models');
 const { Op } = require('sequelize');
 const { STATUS_GROUPS } = require('../utils/applicationStatus.utils');
+const { buildAssetUrl } = require('../utils/urlHelper');
 
 class TalentPoolController {
   /**
@@ -136,7 +137,7 @@ class TalentPoolController {
             skills: c.skills || [],
             status: c.Applications?.[0]?.status || "UNPROCESSED",
             score: Math.round(c.Applications?.[0]?.overall_score || c.ai_score || 0),
-            img: c.profile_image_path ? `http://localhost:5000${c.profile_image_path.startsWith('/') ? '' : '/'}${c.profile_image_path}` : "/images/default-avatar.png",
+            img: buildAssetUrl(c.profile_image_path, "/images/default-avatar.png"),
             added: new Date(c.created_at).toLocaleDateString()
           }))
         }
