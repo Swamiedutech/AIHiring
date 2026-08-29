@@ -4,6 +4,7 @@ const {
   InterviewSession, InterviewAnalysis, MalpracticeEvent, Job, Offer
 } = require('../models');
 const { Op } = require('sequelize');
+const { sequelize } = require('../config/db');
 const auditLogger = require('../services/auditLogger.service');
 const { computeApplicationScore } = require('../utils/applicationStatus.utils');
 const aiService = require('../services/ai.service');
@@ -151,39 +152,45 @@ class HRDecisionController {
 
       if (decision === 'REQUEST_RE_INTERVIEW') {
         application.interview_score = null;
-        // Delete ALL previous interview data (analysis + sessions) for a fresh slate
+        const t = await sequelize.transaction();
         try {
-          const { AssessmentAnalysis: AA } = require('../models');
-          await InterviewAnalysis.destroy({ where: { application_id: applicationId } });
-          // Cancel/delete ALL interview sessions (including COMPLETED ones) so candidate gets a fresh session
-          await InterviewSession.destroy({ where: { application_id: applicationId } });
-          // Create a fresh scheduled session for the re-interview
+          // Archive rather than delete — mark with a note since is_archived column doesn't exist
+          await InterviewAnalysis.update(
+            { scoring_rationale: sequelize.literal(`COALESCE(scoring_rationale, '') || ' [SUPERSEDED]'`) },
+            { where: { application_id: applicationId }, transaction: t }
+          );
+          await InterviewSession.update({ status: 'CANCELLED' }, { where: { application_id: applicationId }, transaction: t });
+          
           await InterviewSession.create({
             application_id: applicationId,
             status: 'SCHEDULED',
             interview_type: 'VIDEO',
             scheduled_at: new Date()
-          });
-          console.log(`[Re-Interview] Cleared all interview data for application ${applicationId}`);
+          }, { transaction: t });
+          await t.commit();
+          console.log(`[Re-Interview] Superseded interview data for application ${applicationId}`);
         } catch (cleanErr) {
+          await t.rollback();
           console.error('Cleanup error in re-interview request:', cleanErr.message);
         }
       }
       if (decision === 'REQUEST_RE_ASSESSMENT') {
         application.technical_score = null;
-        // Delete ALL previous assessment data (attempts + analysis) so old AI insights are wiped
+        const t = await sequelize.transaction();
         try {
-          const { AssessmentAnalysis } = require('../models');
-          await AssessmentAnalysis.destroy({ where: { application_id: applicationId } });
-          console.log(`[Re-Assessment] Deleted AssessmentAnalysis for application ${applicationId}`);
+          const { AssessmentAnalysis, AssessmentAttempt } = require('../models');
+          // Archive rather than delete
+          await AssessmentAnalysis.update({ test_name: sequelize.literal(`test_name || ' (ARCHIVED)'`) }, { where: { application_id: applicationId }, transaction: t });
+          await AssessmentAttempt.update(
+            { status: 'SUPERSEDED' },
+            { where: { application_id: applicationId }, transaction: t }
+          );
+          await t.commit();
+          console.log(`[Re-Assessment] Superseded Assessment data for application ${applicationId}`);
         } catch (cleanErr) {
-          console.error('AssessmentAnalysis cleanup error:', cleanErr.message);
+          await t.rollback();
+          console.error('Assessment cleanup error:', cleanErr.message);
         }
-        await AssessmentAttempt.update(
-          { status: 'NOT_STARTED', score: null, answers: null, submitted_at: null, ai_score: null, structure_score: null, concept_coverage: null, final_score: null, ai_feedback: null, metadata: null },
-          { where: { application_id: applicationId } }
-        );
-        console.log(`[Re-Assessment] Reset AssessmentAttempt for application ${applicationId}`);
       }
 
       // Handle Offer record creation for SEND_OFFER

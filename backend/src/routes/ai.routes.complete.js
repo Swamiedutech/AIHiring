@@ -65,7 +65,7 @@ router.post(
 router.post(
   '/assessment/mcq',
   isAuthenticated,
-  authorize(['candidate', 'hr', 'admin']),
+  authorize(['hr', 'admin']),
   auditLog('MCQ_ANALYSIS'),
   aiController.analyzeMCQAssessment
 );

@@ -252,7 +252,7 @@ class CandidateProfileController {
           enrichedAnswers[qId] = {
             ...answers[qId],
             question_text: answers[qId]?.question_text || questionMap[qId]?.text || questionMap[String(qId).toLowerCase()]?.text || `Question ID: ${qId}`,
-            correct_answer: answers[qId]?.correct_answer || questionMap[qId]?.correct || null,
+            // STRIPPED: correct_answer is intentionally removed to prevent leaking the answer key
             answer_text: answers[qId]?.answer_text || null
           };
         });

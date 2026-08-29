@@ -62,7 +62,10 @@ module.exports = (sequelize) => {
     tableName: "Users",
     timestamps: true,
     createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    updatedAt: 'updated_at',
+    defaultScope: {
+      attributes: { exclude: ['password', 'otp', 'otp_expires_at'] }
+    }
   });
 
   User.prototype.toJSON = function () {

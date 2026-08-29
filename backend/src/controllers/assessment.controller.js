@@ -56,6 +56,49 @@ exports.startAssessment = async (req, res) => {
       await transaction.rollback();
       return res.status(400).json({ error: 'Assessment already completed and cannot be restarted' });
     }
+    if (attempt && attempt.status === 'IN_PROGRESS') {
+      // Resume existing attempt — return the SAME questions that were originally assigned
+      const storedMcqIds = attempt.metadata?.mcq_ids || [];
+      const storedTheoryIds = attempt.metadata?.theory_ids || [];
+
+      const storedMcqQuestions = storedMcqIds.length > 0
+        ? await TechnicalQuestionBank.findAll({ where: { questionId: { [Op.in]: storedMcqIds } }, transaction })
+        : [];
+      const storedTheoryQuestions = storedTheoryIds.length > 0
+        ? await TechnicalQuestionBank.findAll({ where: { questionId: { [Op.in]: storedTheoryIds } }, transaction })
+        : [];
+
+      await transaction.commit();
+
+      const formatQuestion = (q, section) => ({
+        id: q.questionId,
+        question: q.question,
+        options: q.options || [],
+        type: q.questionType || q.section_type,
+        topic: q.topic,
+        difficulty: q.difficulty || 'MEDIUM',
+        weight: q.weight || 1,
+        section,
+        evaluation_type: q.evaluation_type || (q.section_type === 'MCQ' ? 'MCQ' : 'AI')
+      });
+
+      return res.json({
+        success: true,
+        attempt_id: attempt.id,
+        resumed: true,
+        config: {
+          section1_duration: ASSESSMENT_CONFIG.SECTION1_DURATION_MINUTES,
+          section2_duration: ASSESSMENT_CONFIG.SECTION2_DURATION_MINUTES,
+          total_duration: ASSESSMENT_CONFIG.TOTAL_DURATION_MINUTES,
+          mcq_count: storedMcqQuestions.length,
+          theory_count: storedTheoryQuestions.length,
+        },
+        section1: storedMcqQuestions.map(q => formatQuestion(q, 1)),
+        section2: storedTheoryQuestions.map(q => formatQuestion(q, 2)),
+        started_at: attempt.started_at,
+        answers: attempt.answers || {},
+      });
+    }
 
     // --- SECTION 1: Fetch 20 MCQ questions ---
     let mcqPool = await TechnicalQuestionBank.findAll({
@@ -134,12 +177,7 @@ exports.startAssessment = async (req, res) => {
       device_info: { userAgent: req.headers['user-agent'] }
     };
 
-    if (attempt) {
-      // Do not overwrite existing attempt if it's already IN_PROGRESS to prevent getting fresh questions
-      // Just return the existing attempt config and questions later
-    } else {
-      attempt = await AssessmentAttempt.create(attemptData, { transaction });
-    }
+    attempt = await AssessmentAttempt.create(attemptData, { transaction });
 
     await application.update({ status: 'TECHNICAL_ROUND_IN_PROGRESS' }, { transaction });
     await ApplicationStatusLog.create({

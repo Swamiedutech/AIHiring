@@ -159,7 +159,7 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.unscoped().findOne({ where: { email } });
     if (!user) {
       // Log failed login attempt (no user object available)
       await auditLogger.log({
@@ -290,7 +290,7 @@ exports.changePassword = async (req, res) => {
     if (!currentPassword || !newPassword) return res.status(400).json({ message: "Both fields required" });
     if (newPassword.length < 6) return res.status(400).json({ message: "New password must be at least 6 characters" });
 
-    const user = await User.findByPk(req.user.id);
+    const user = await User.unscoped().findByPk(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const isMatch = await bcrypt.compare(currentPassword, user.password);

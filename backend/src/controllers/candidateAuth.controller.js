@@ -176,7 +176,7 @@ exports.candidateLogin = async (req, res) => {
     }
 
     // Find user
-    const user = await User.findOne({ where: { email } });
+    const user = await User.unscoped().findOne({ where: { email } });
     if (!user || user.role !== "CANDIDATE") {
       return res.status(404).json({ message: "Candidate not found" });
     }
