@@ -1,7 +1,14 @@
 import axios from "axios";
+import { useAuthStore } from "./store";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+export const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || "").replace(/\/+$/, '');
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-export const BACKEND_URL = (process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000").replace(/\/+$/, '');
+export const getFileUrl = (path: string) => {
+  if (!path) return '';
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const prefix = path.startsWith('/') ? '' : '/';
+  return `${BACKEND_URL}${prefix}${path}${token ? `?token=${token}` : ''}`;
+};
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -27,8 +34,7 @@ api.interceptors.response.use(
     if (err.response?.status === 401 && !isRedirecting) {
       if (typeof window !== "undefined") {
         isRedirecting = true;
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
+        useAuthStore.getState().clearAuth();
         // Use setTimeout to break out of the axios promise chain
         setTimeout(() => {
           window.location.replace("/login");

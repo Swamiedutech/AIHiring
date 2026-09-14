@@ -21,7 +21,7 @@ exports.getDashboardOverview = async (req, res) => {
 
     const candidate = await Candidate.findOne({
       where: { user_id: req.user.id },
-      include: [{ model: User }]
+      include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }]
     });
 
     if (!candidate) {
@@ -113,7 +113,7 @@ exports.getDashboardOverview = async (req, res) => {
 
   } catch (error) {
     console.error("Dashboard overview error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 

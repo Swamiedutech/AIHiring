@@ -5,6 +5,8 @@ const assessmentController = require('../controllers/assessment.controller');
 const authMiddleware = require('../middleware/auth.middleware');
 const roleMiddleware = require('../middleware/role.middleware');
 
+const { assessmentSecurityMiddleware } = require('../middleware/antiCheat.middleware');
+
 // ==================== CANDIDATE ROUTES ====================
 router.get('/config', authMiddleware, assessmentController.getAssessmentConfig);
 
@@ -27,6 +29,7 @@ router.post(
   '/:attemptId/answer',
   authMiddleware,
   roleMiddleware(['CANDIDATE']),
+  ...assessmentSecurityMiddleware,
   assessmentController.saveAnswer
 );
 
@@ -38,6 +41,7 @@ router.post(
   '/:attemptId/answers',
   authMiddleware,
   roleMiddleware(['CANDIDATE']),
+  ...assessmentSecurityMiddleware,
   assessmentController.saveAllAnswers
 );
 
@@ -49,6 +53,7 @@ router.post(
   '/:attemptId/submit',
   authMiddleware,
   roleMiddleware(['CANDIDATE']),
+  ...assessmentSecurityMiddleware,
   assessmentController.submitAssessment
 );
 

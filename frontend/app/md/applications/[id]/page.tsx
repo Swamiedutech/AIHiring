@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { hrApi } from "@/lib/api";
-import api, { BACKEND_URL } from "@/lib/api";
+import api, { BACKEND_URL, getFileUrl } from "@/lib/api";
 import PanelLayout from "@/components/shared/PanelLayout";
 import dynamic from "next/dynamic";
 
@@ -73,7 +73,7 @@ export default function MDApplicationReview() {
   const candidateType = candidate?.candidate_type || app?.candidate_type || '—';
   const phone = candidate?.phone || '—';
   const location = candidate?.location || candidate?.working_address || '—';
-  const profileImage = candidate?.profileImage || candidate?.profile_image_path ? `${BACKEND_URL}${candidate.profile_image_path?.startsWith('/') ? '' : '/'}${candidate.profile_image_path}` : null;
+  const profileImage = candidate?.profileImage || candidate?.profile_image_path ? getFileUrl(candidate.profile_image_path) : null;
 
   // Resume parsed data
   // The backend might not send ResumeAnalysis directly, let's check evaluationProsCons or use it if available

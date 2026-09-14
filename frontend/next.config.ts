@@ -21,7 +21,19 @@ const nextConfig: NextConfig = {
   // Only transpile CJS packages that need it; Three.js is pure ESM and doesn't need transpilation
   transpilePackages: ['lucide-react', 'recharts'],
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
+  },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        ],
+      },
+    ];
   },
 };
 

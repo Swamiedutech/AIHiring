@@ -172,23 +172,25 @@ class ScoringService {
                   (interviewScore * weights.interview) + 
                   (Math.min(malpracticeScore, 10) * weights.malpractice);
 
-    // Normalize to 100 (Max weighted score is ~105, not 10.5)
-    mlScore = Math.max(0, Math.min(100, (mlScore / 105) * 100)); 
+    // Calculate dynamic max possible score given the weights to use as divisor
+    const maxTheoreticalScore = intercept + 
+                                (100 * weights.resume * 0.8) + 
+                                (100 * weights.assessment * 1.2) + 
+                                (100 * weights.interview);
+
+    mlScore = Math.max(0, Math.min(100, (mlScore / maxTheoreticalScore) * 100)); 
 
     // 2. Hybrid Logic Implementation
     let finalScore;
     let method;
-    let confidence;
     const isAiAvailable = aiScore !== null && !isNaN(aiScore) && aiScore > 0;
 
     if (isAiAvailable) {
       finalScore = (aiScore * 0.6) + (mlScore * 0.4);
-      method = 'HYBRID_AI_ML_INTEGRATED';
-      confidence = 0.94;
+      method = 'HYBRID_AI_ML';
     } else {
       finalScore = mlScore;
-      method = 'ML_REGRESSION_FALLBACK';
-      confidence = 0.78;
+      method = 'ML_REGRESSION';
     }
 
     finalScore = Math.round(finalScore);
@@ -202,7 +204,6 @@ class ScoringService {
       finalScore,
       decision: classification,
       methodUsed: method,
-      confidence,
       passingThreshold,
       insights: this.generateInsights(features, finalScore, classification)
     };

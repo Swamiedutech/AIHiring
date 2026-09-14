@@ -17,12 +17,29 @@ services:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_DB: recruitment_db
-    ports:
-      - "5432:5432"
+    # Do not publish port publicly for security
+    expose:
+      - "5432"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d recruitment_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+  ai_service:
+    build:
+      context: ./backend/ai_service
+    environment:
+      - PORT=5001
+      - FLASK_ENV=production
+    expose:
+      - "5001"
+    restart: on-failure
 
   # Frontend (once a Dockerfile is added there)
   # frontend:

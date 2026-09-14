@@ -34,7 +34,7 @@ exports.uploadResume = async (req, res) => {
     };
 
     try {
-      const dataBuffer = fs.readFileSync(req.file.path);
+      const dataBuffer = await fs.promises.readFile(req.file.path);
       let text = "";
       if (req.file.path.toLowerCase().endsWith('.pdf')) {
         const pdfInstance = new PDFParse({ data: dataBuffer });
@@ -213,6 +213,9 @@ exports.uploadResume = async (req, res) => {
       });
       if (application) {
         candidate = application.Candidate;
+        if (req.user.role === 'CANDIDATE' && candidate.user_id !== req.user.id) {
+          return res.status(403).json({ error: "Unauthorized access to application." });
+        }
       }
     }
 
@@ -404,7 +407,7 @@ exports.uploadResume = async (req, res) => {
     logger.error(`[Resume] Upload error: ${error.message}`);
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -546,7 +549,7 @@ exports.reparseResume = async (req, res) => {
 
   } catch (error) {
     logger.error(`[Reparse] Critical failure: ${error.message}`);
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 

@@ -24,7 +24,6 @@ const navGroups = [
   {
     group: "PROFILE & SETTINGS", items: [
       { label: "Profile", href: "/candidate/profile", icon: User },
-      { label: "Account Settings", href: "/candidate/settings", icon: Settings2 },
     ]
   }
 ];

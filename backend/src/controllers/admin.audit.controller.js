@@ -32,7 +32,7 @@ const getAuditLogs = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching audit logs",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -66,7 +66,7 @@ const searchAuditLogs = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error searching audit logs",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -91,7 +91,7 @@ const getDataRetentionPolicy = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching data retention policy",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -102,13 +102,20 @@ const updateDataRetentionPolicy = async (req, res) => {
       order: [["createdAt", "DESC"]],
     });
 
+    const allowedPolicyFields = {
+      retainApplicantDataDays: req.body.retainApplicantDataDays,
+      retainAuditLogsDays: req.body.retainAuditLogsDays,
+      retainInterviewVideosDays: req.body.retainInterviewVideosDays,
+      autoAnonymize: req.body.autoAnonymize
+    };
+
     if (!policy) {
       policy = await DataRetentionPolicy.create({
-        ...req.body,
+        ...allowedPolicyFields,
         createdBy: req.user.id,
       });
     } else {
-      await policy.update(req.body);
+      await policy.update(allowedPolicyFields);
     }
 
     await auditLogger.logRuleChange(req, {
@@ -127,7 +134,7 @@ const updateDataRetentionPolicy = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error updating data retention policy",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -146,53 +153,21 @@ const getSystemHealth = async (req, res) => {
     }
 
     // 2. Real-time Failure Scan
-    // Count applications that failed in parsing or decision stages in the last 24h
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    
-    const parsingFailures = await Application.count({
-      where: {
-        status: "APPLIED",
-        updated_at: { [Op.gte]: oneDayAgo }
-      }
-    });
+    // Health metrics are now updated asynchronously via health.worker.js
+    // We just read the most recent snapshot here.
+    let latestHealth = await SystemHealth.findOne({ order: [['created_at', 'DESC']] });
 
-    const aiDecisionFailures = await ApplicationStatusLog.count({
-      where: {
-        new_status: "FAILURE",
-        created_at: { [Op.gte]: oneDayAgo }
-      }
-    });
-
-    // 3. Calculate Average Approval Latency (Time from APPLIED to HIRED/REJECTED)
-    const completedApps = await Application.findAll({
-      where: {
-        status: { [Op.in]: ["HIRED", "REJECTED", "OFFERED", "SELECTED"] },
-        updated_at: { [Op.gte]: oneDayAgo }
-      },
-      attributes: ["created_at", "updated_at"]
-    });
-
-    let avgLatency = 4.2; // Default baseline
-    if (completedApps.length > 0) {
-      const totalLatency = completedApps.reduce((acc, app) => {
-        const diff = new Date(app.updated_at).getTime() - new Date(app.created_at).getTime();
-        return acc + diff;
-      }, 0);
-      avgLatency = parseFloat((totalLatency / completedApps.length / 3600000).toFixed(1));
+    if (!latestHealth) {
+      // Fallback if worker hasn't run yet
+      latestHealth = {
+        resumeParsingFailures: 0,
+        interviewAiCrashes: 0,
+        emailFailures: 0,
+        longRunningApprovals: 0,
+        averageApprovalTime: 4.2,
+        failedAiTasks: 0
+      };
     }
-
-    // 4. Create/Update Health Record
-    const latestHealth = await SystemHealth.create({
-      resumeParsingFailures: parsingFailures,
-      interviewAiCrashes: aiDecisionFailures, // Mapping AI Decision failures here
-      emailFailures: 0,
-      longRunningApprovals: await Application.count({ where: { status: "HR_REVIEW" } }),
-      averageApprovalTime: avgLatency,
-      databaseHealth: dbStatus ? "HEALTHY" : "CRITICAL",
-      apiResponseTime: 45, // Baseline
-      systemLoadPercentage: 15.0,
-      failedAiTasks: parsingFailures + aiDecisionFailures
-    });
 
     // 5. Map to Frontend format
     const healthReport = {
@@ -226,14 +201,25 @@ const getSystemHealth = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error performing system health scan",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
 
 const updateSystemHealth = async (req, res) => {
   try {
-    const health = await SystemHealth.create(req.body);
+    const allowedHealthFields = {
+      resumeParsingFailures: req.body.resumeParsingFailures,
+      interviewAiCrashes: req.body.interviewAiCrashes,
+      emailFailures: req.body.emailFailures,
+      longRunningApprovals: req.body.longRunningApprovals,
+      averageApprovalTime: req.body.averageApprovalTime,
+      databaseHealth: req.body.databaseHealth,
+      apiResponseTime: req.body.apiResponseTime,
+      systemLoadPercentage: req.body.systemLoadPercentage,
+      failedAiTasks: req.body.failedAiTasks
+    };
+    const health = await SystemHealth.create(allowedHealthFields);
 
     if (req.body.failedAiTasks > 0 || req.body.databaseHealth === "CRITICAL") {
       await auditLogger.log({
@@ -258,7 +244,7 @@ const updateSystemHealth = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error updating system health",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -290,32 +276,45 @@ const getAuditStats = async (req, res) => {
     });
   } catch (error) {
     console.error("getAuditStats error:", error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 
 const exportAuditLogs = async (req, res) => {
   try {
     const { format = "json" } = req.query;
-    const logs = await AdminAuditLog.findAll({ order: [["timestamp", "DESC"]] });
-
     if (format === "csv") {
-      // Simple CSV generation
-      const headers = "ID,Type,User,Role,Entity,EntityID,Description,IP,Status,Timestamp\n";
-      const rows = logs.map(l => {
-        const escape = (val) => `"${String(val || '').replace(/"/g, '""')}"`;
-        return [
-          l.auditId, l.actionType, l.userId, l.userRole, 
-          l.entityType, l.entityId, l.description, 
-          l.ipAddress, l.status, l.timestamp
-        ].map(escape).join(",");
-      }).join("\n");
-      
       res.setHeader("Content-Type", "text/csv");
       res.attachment("audit-logs.csv");
-      return res.send(headers + rows);
+      res.write("ID,Type,User,Role,Entity,EntityID,Description,IP,Status,Timestamp\n");
+
+      let offset = 0;
+      const limit = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const logs = await AdminAuditLog.findAll({ order: [["timestamp", "DESC"]], limit, offset });
+        if (logs.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        const rows = logs.map(l => {
+          const escape = (val) => `"${String(val || '').replace(/"/g, '""')}"`;
+          return [
+            l.auditId, l.actionType, l.userId, l.userRole, 
+            l.entityType, l.entityId, l.description, 
+            l.ipAddress, l.status, l.timestamp
+          ].map(escape).join(",");
+        }).join("\n");
+
+        res.write(rows + "\n");
+        offset += limit;
+      }
+      return res.end();
     }
 
+    const logs = await AdminAuditLog.findAll({ order: [["timestamp", "DESC"]] });
     res.json({ success: true, data: logs });
   } catch (error) {
     res.status(500).json({ success: false });

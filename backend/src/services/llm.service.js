@@ -64,7 +64,8 @@ class LLMService {
     const response = await this.openai.chat.completions.create({
       model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" }
+      response_format: { type: "json_object" },
+      temperature: 0.0
     });
     return response.choices[0].message.content;
   }
@@ -78,7 +79,12 @@ class LLMService {
 
     try {
       const genAI = new GoogleGenerativeAI(key);
-      const model = genAI.getGenerativeModel({ model: this.geminiModelName });
+      const model = genAI.getGenerativeModel({ 
+        model: this.geminiModelName,
+        generationConfig: {
+          temperature: 0.0
+        }
+      });
       const result = await model.generateContent(prompt);
       return result.response.text();
     } catch (error) {

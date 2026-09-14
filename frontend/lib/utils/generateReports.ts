@@ -226,12 +226,12 @@ export const generateInterviewReport = (data: {
   
   autoTable(doc, {
     startY: (doc as any).lastAutoTable.finalY + 20,
-    head: [["Skillset", "Score", "Confidence"]],
+    head: [["Skillset", "Score"]],
     body: [
-      ["Communication", `${analysis.communication_score || 0}%`, analysis.confidence_level || "Medium"],
-      ["Problem Solving", `${analysis.problem_solving_score || 0}%`, "High"],
-      ["Soft Skills", `${analysis.soft_skills_score || 0}%`, "N/A"],
-      ["Cultural Fit", `${analysis.cultural_fit_score || 0}%`, "High"],
+      ["Communication", `${analysis.communication_score || 0}%`],
+      ["Problem Solving", `${analysis.problem_solving_score || 0}%`],
+      ["Soft Skills", `${analysis.soft_skills_score || 0}%`],
+      ["Cultural Fit", `${analysis.cultural_fit_score || 0}%`],
     ],
     theme: "grid",
     headStyles: { fillColor: [30, 64, 175], font: "times", fontStyle: "bold" },

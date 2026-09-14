@@ -42,12 +42,20 @@ class HRDashboardController {
     try {
       const stages = STATUS_GROUPS.funnel;
 
-      const funnelData = await Promise.all(
-        stages.map(async s => ({
-          stage: s.key,
-          count: await Application.count({ where: { status: { [Op.in]: s.statuses } } })
-        }))
-      );
+      const statusCounts = await Application.findAll({
+        attributes: ['status', [Application.sequelize.fn('COUNT', Application.sequelize.col('id')), 'count']],
+        group: ['status'],
+        raw: true
+      });
+
+      const countMap = {};
+      statusCounts.forEach(c => countMap[c.status] = parseInt(c.count, 10));
+
+      const funnelData = stages.map(s => {
+        let count = 0;
+        s.statuses.forEach(status => count += countMap[status] || 0);
+        return { stage: s.key, count };
+      });
 
       const combined = funnelData.map((item, i, arr) => {
         const prev    = i === 0 ? item.count : arr[i - 1].count;

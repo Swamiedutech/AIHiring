@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { candidateApi, BACKEND_URL } from "@/lib/api";
+import { candidateApi, BACKEND_URL, getFileUrl } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -171,7 +171,7 @@ export default function CandidateProfilePage() {
   const avatarSrc = candidate?.profile_image_path
     ? (candidate.profile_image_path.startsWith('http')
       ? candidate.profile_image_path
-      : `${BACKEND_URL}${candidate.profile_image_path}`)
+      : getFileUrl(candidate.profile_image_path))
     : null;
 
   return (
@@ -562,13 +562,13 @@ export default function CandidateProfilePage() {
                       variant="outline"
                       size="icon"
                       className="w-8 h-8 rounded-lg border-slate-200 text-blue-600 hover:bg-blue-50"
-                      onClick={() => window.open(`${BACKEND_URL}${candidate.resume_path}`, '_blank')}
+                      onClick={() => window.open(getFileUrl(candidate.resume_path), '_blank')}
                       title="View Resume"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                     </Button>
                     <a
-                      href={`${BACKEND_URL}${candidate.resume_path}`}
+                      href={getFileUrl(candidate.resume_path)}
                       download
                       className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 text-green-600 hover:bg-green-50 transition-colors"
                       title="Download Resume"
@@ -583,7 +583,7 @@ export default function CandidateProfilePage() {
             {candidate?.resume_path?.endsWith('.pdf') && (
               <div className="rounded-lg overflow-hidden border border-slate-100 bg-slate-50">
                 <iframe
-                  src={`${BACKEND_URL}${candidate.resume_path}#toolbar=0&navpanes=0`}
+                  src={getFileUrl(candidate.resume_path) + '#toolbar=0&navpanes=0'}
                   className="w-full h-[200px]"
                   title="Resume Preview"
                 />

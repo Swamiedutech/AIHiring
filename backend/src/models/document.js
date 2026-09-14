@@ -11,12 +11,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     applicationId: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: { model: 'Applications', key: 'id' }
     },
     candidateId: {
-      type: DataTypes.UUID,
+      type: DataTypes.INTEGER,
       allowNull: false,
       references: { model: 'Users', key: 'id' }
     },

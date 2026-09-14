@@ -3,7 +3,7 @@
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     // Update TechnicalQuestionBank enum to include RUBBER_PROCESS_ENGINEER
-    await queryInterface.changeColumn('TechnicalQuestionBanks', 'jobRole', {
+    await queryInterface.changeColumn('technical_question_bank', 'jobRole', {
       type: Sequelize.ENUM(
         "SENIOR_AI_ENGINEER",
         "FULL_STACK_DEVELOPER",
@@ -19,7 +19,7 @@ module.exports = {
     });
 
     // Update InterviewQuestionBank enum to include RUBBER_PROCESS_ENGINEER
-    await queryInterface.changeColumn('InterviewQuestionBanks', 'jobRole', {
+    await queryInterface.changeColumn('interview_question_bank', 'jobRole', {
       type: Sequelize.ENUM(
         "SENIOR_AI_ENGINEER",
         "FULL_STACK_DEVELOPER",
@@ -37,7 +37,7 @@ module.exports = {
 
   down: async (queryInterface, Sequelize) => {
     // Revert TechnicalQuestionBank enum
-    await queryInterface.changeColumn('TechnicalQuestionBanks', 'jobRole', {
+    await queryInterface.changeColumn('technical_question_bank', 'jobRole', {
       type: Sequelize.ENUM(
         "SENIOR_AI_ENGINEER",
         "FULL_STACK_DEVELOPER",
@@ -52,7 +52,7 @@ module.exports = {
     });
 
     // Revert InterviewQuestionBank enum
-    await queryInterface.changeColumn('InterviewQuestionBanks', 'jobRole', {
+    await queryInterface.changeColumn('interview_question_bank', 'jobRole', {
       type: Sequelize.ENUM(
         "SENIOR_AI_ENGINEER",
         "FULL_STACK_DEVELOPER",

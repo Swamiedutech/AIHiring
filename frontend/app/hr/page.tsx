@@ -13,10 +13,24 @@ import {
   Search, Filter, Plus, ChevronRight, Target, LayoutDashboard, FileText, Briefcase,
   Layers, MousePointer2, RefreshCw, Shield
 } from "lucide-react";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Legend, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area
-} from "recharts";
+import dynamic from "next/dynamic";
+
+const BarChart = dynamic(() => import("recharts").then((mod) => mod.BarChart), { ssr: false });
+const Bar = dynamic(() => import("recharts").then((mod) => mod.Bar), { ssr: false });
+const XAxis = dynamic(() => import("recharts").then((mod) => mod.XAxis), { ssr: false });
+const YAxis = dynamic(() => import("recharts").then((mod) => mod.YAxis), { ssr: false });
+const CartesianGrid = dynamic(() => import("recharts").then((mod) => mod.CartesianGrid), { ssr: false });
+const Tooltip = dynamic(() => import("recharts").then((mod) => mod.Tooltip), { ssr: false });
+const ResponsiveContainer = dynamic(() => import("recharts").then((mod) => mod.ResponsiveContainer), { ssr: false });
+const Legend = dynamic(() => import("recharts").then((mod) => mod.Legend), { ssr: false });
+const LineChart = dynamic(() => import("recharts").then((mod) => mod.LineChart), { ssr: false });
+const Line = dynamic(() => import("recharts").then((mod) => mod.Line), { ssr: false });
+const PieChart = dynamic(() => import("recharts").then((mod) => mod.PieChart), { ssr: false });
+const Pie = dynamic(() => import("recharts").then((mod) => mod.Pie), { ssr: false });
+const Cell = dynamic(() => import("recharts").then((mod) => mod.Cell), { ssr: false });
+const AreaChart = dynamic(() => import("recharts").then((mod) => mod.AreaChart), { ssr: false });
+const Area = dynamic(() => import("recharts").then((mod) => mod.Area), { ssr: false });
+
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,7 +64,9 @@ function KPICard({ title, value, trend, trendValue, icon: Icon, sparkData, color
           </div>
           <div className="h-8 w-20">
             <ResponsiveContainer minWidth={1} minHeight={1} width="100%" height="100%">
+              <AreaChart data={sparkData}>
                 <Area type="monotone" dataKey="v" stroke={trend === "up" ? "#14b8a6" : "#f43f5e"} fill={trend === "up" ? "#14b8a610" : "#f43f5e10"} strokeWidth={1.5} />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -119,31 +135,15 @@ export default function HRDashboard() {
     stage: (f.stage || "").replace(/_/g, ' '),
     count: Number(f.count || 0),
     conversion: f.dropoff === 0 ? 100 : 100 - (f.dropoff || 0)
-  })) : [
-    { stage: 'APPLIED', count: 0, conversion: 0 },
-    { stage: 'RESUME CLEARED', count: 0, conversion: 0 },
-    { stage: 'TECHNICAL ROUND', count: 0, conversion: 0 },
-    { stage: 'INTERVIEW', count: 0, conversion: 0 },
-    { stage: 'HR REVIEW', count: 0, conversion: 0 },
-    { stage: 'SELECTED', count: 0, conversion: 0 },
-  ];
+  })) : [];
 
   const distributionData = (distributionRaw && distributionRaw.length > 0) ? distributionRaw.map((d: any, i: number) => ({
     name: d.label || d.status || d.name || 'Unknown',
     value: Number(d.value || d.count || 0),
     color: ['#14b8a6', '#0ea5e9', '#f59e0b', '#8b5cf6', '#f43f5e'][i % 5]
-  })) : [
-    { name: 'Loading...', value: 100, color: '#94a3b8' }
-  ];
+  })) : [];
 
-  const topCandidate = topCandidatesRaw?.[0] || {
-    name: "Sarthak Giri",
-    job: "Executive - Marketing",
-    score: 92,
-    integrityScore: 94,
-    status: "SELECTED",
-    applicationId: "top-mock"
-  };
+  const topCandidate = topCandidatesRaw?.[0] || null;
 
   return (
     <PanelLayout title="HR Dashboard" allowedRoles={["HR", "ADMIN"]}>
@@ -277,7 +277,7 @@ export default function HRDashboard() {
               </CardHeader>
               <CardContent className="p-3 space-y-2.5">
                 {[
-                  { title: 'Top Performer', desc: `${topCandidate.name} is in top 5%`, score: `${topCandidate.score}/100`, icon: Star, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+                  { title: 'Top Performer', desc: topCandidate ? `${topCandidate.name} is in top 5%` : 'No data yet', score: topCandidate ? `${topCandidate.score}/100` : 'N/A', icon: Star, color: 'text-amber-500', bg: 'bg-amber-500/10' },
                   { title: 'Risk Alert', desc: `${kpiData?.rejected || 0} flagged candidates`, score: 'High', icon: AlertCircle, color: 'text-rose-500', bg: 'bg-rose-500/10' },
                   { title: 'Bottleneck', desc: 'Assessment stage drops', score: 'Medium', icon: Target, color: 'text-amber-500', bg: 'bg-amber-500/10' },
                   { title: 'Hiring Forecast', desc: `Goal by Next Month`, score: 'On Track', icon: TrendingUp, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
@@ -299,59 +299,65 @@ export default function HRDashboard() {
             </Card>
 
             {/* Top Candidate Spotlight */}
-            <Card className="border-border/40 shadow-sm rounded-2xl overflow-hidden border-t-2 border-t-emerald-500">
-              <CardHeader className="border-b border-border/40 px-4 py-2.5 flex flex-row items-center justify-between bg-muted/20">
-                <CardTitle className="text-[11px] font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                  <Trophy className="w-3.5 h-3.5 text-emerald-500" /> Top Candidate
-                </CardTitle>
-                <Button variant="link" onClick={() => router.push('/hr/candidates')} className="text-[9px] font-bold uppercase p-0 h-fit text-muted-foreground hover:text-primary">View All</Button>
-              </CardHeader>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-lg bg-muted border border-border/50 overflow-hidden">
-                    <img
-                      src={topCandidate.profileImage || "/images/default-avatar.png"}
-                      alt="Top"
-                      className="w-full h-full object-cover"
-                      onError={(e: any) => { e.target.src = "/images/default-avatar.png"; }}
-                    />
+            {topCandidate ? (
+              <Card className="border-border/40 shadow-sm rounded-2xl overflow-hidden border-t-2 border-t-emerald-500">
+                <CardHeader className="border-b border-border/40 px-4 py-2.5 flex flex-row items-center justify-between bg-muted/20">
+                  <CardTitle className="text-[11px] font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                    <Trophy className="w-3.5 h-3.5 text-emerald-500" /> Top Candidate
+                  </CardTitle>
+                  <Button variant="link" onClick={() => router.push('/hr/candidates')} className="text-[9px] font-bold uppercase p-0 h-fit text-muted-foreground hover:text-primary">View All</Button>
+                </CardHeader>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-lg bg-muted border border-border/50 overflow-hidden">
+                      <img
+                        src={topCandidate.profileImage || "/images/default-avatar.png"}
+                        alt="Top"
+                        className="w-full h-full object-cover"
+                        onError={(e: any) => { e.target.src = "/images/default-avatar.png"; }}
+                      />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-foreground uppercase tracking-tight">{topCandidate.name}</h4>
+                      <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">{topCandidate.job}</p>
+                      <Badge className="bg-emerald-500/10 text-emerald-500 border-none text-[8px] font-bold mt-1 px-1.5 py-0">Strong Hire</Badge>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-foreground uppercase tracking-tight">{topCandidate.name}</h4>
-                    <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">{topCandidate.job}</p>
-                    <Badge className="bg-emerald-500/10 text-emerald-500 border-none text-[8px] font-bold mt-1 px-1.5 py-0">Strong Hire</Badge>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-lg font-bold text-foreground leading-none">{topCandidate.score}<span className="text-[10px] text-muted-foreground uppercase ml-0.5">/100</span></p>
+                      <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest mt-0.5">Overall Score</p>
+                    </div>
+                    <div className="flex gap-1.5">
+                      {['Comm', 'Logic', 'Fit'].map((k) => (
+                        <Badge key={k} variant="outline" className="text-[8px] font-bold uppercase border-border/60 px-1 py-0">{k}</Badge>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-lg font-bold text-foreground leading-none">{topCandidate.score}<span className="text-[10px] text-muted-foreground uppercase ml-0.5">/100</span></p>
-                    <p className="text-[8px] font-bold text-muted-foreground uppercase tracking-widest mt-0.5">Overall Score</p>
+                  <div className="grid grid-cols-3 gap-2 mb-4 border-t border-border/40 pt-3">
+                    <div className="text-center">
+                      <p className="text-[11px] font-bold text-foreground">3.2 Yrs</p>
+                      <p className="text-[8px] font-medium text-muted-foreground uppercase tracking-wider">Exp</p>
+                    </div>
+                    <div className="text-center border-x border-border/40">
+                      <p className="text-[11px] font-bold text-foreground">{topCandidate.integrityScore}%</p>
+                      <p className="text-[8px] font-medium text-muted-foreground uppercase tracking-wider">Fit</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[11px] font-bold text-emerald-500">Low</p>
+                      <p className="text-[8px] font-medium text-muted-foreground uppercase tracking-wider">Risk</p>
+                    </div>
                   </div>
-                  <div className="flex gap-1.5">
-                    {['Comm', 'Logic', 'Fit'].map((k) => (
-                      <Badge key={k} variant="outline" className="text-[8px] font-bold uppercase border-border/60 px-1 py-0">{k}</Badge>
-                    ))}
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-2 mb-4 border-t border-border/40 pt-3">
-                  <div className="text-center">
-                    <p className="text-[11px] font-bold text-foreground">3.2 Yrs</p>
-                    <p className="text-[8px] font-medium text-muted-foreground uppercase tracking-wider">Exp</p>
-                  </div>
-                  <div className="text-center border-x border-border/40">
-                    <p className="text-[11px] font-bold text-foreground">{topCandidate.integrityScore}%</p>
-                    <p className="text-[8px] font-medium text-muted-foreground uppercase tracking-wider">Fit</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-[11px] font-bold text-emerald-500">Low</p>
-                    <p className="text-[8px] font-medium text-muted-foreground uppercase tracking-wider">Risk</p>
-                  </div>
-                </div>
-                <Button className="w-full h-8 text-[9px] font-bold uppercase tracking-wider rounded-md" onClick={() => router.push(`/hr/applications/${topCandidate.applicationId}`)}>
-                  View Profile <ChevronRight className="w-3 h-3 ml-1" />
-                </Button>
-              </CardContent>
-            </Card>
+                  <Button className="w-full h-8 text-[9px] font-bold uppercase tracking-wider rounded-md" onClick={() => router.push(`/hr/applications/${topCandidate.applicationId}`)}>
+                    View Profile <ChevronRight className="w-3 h-3 ml-1" />
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="border-border/40 shadow-sm rounded-2xl overflow-hidden flex items-center justify-center min-h-[300px]">
+                <p className="text-xs text-muted-foreground">No candidate data available</p>
+              </Card>
+            )}
 
           </div>
         </div>

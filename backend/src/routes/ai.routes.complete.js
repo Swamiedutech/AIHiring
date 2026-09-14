@@ -2,7 +2,8 @@ const express = require('express');
 const upload = require('../middleware/upload.middleware');
 const aiController = require('../controllers/ai.controller.complete');
 const isAuthenticated = require('../middleware/auth.middleware');
-const { authorize, auditLog } = require('../middleware/rbac.middleware');
+const authorize = require('../middleware/role.middleware');
+const auditLog = (action) => (req, res, next) => { req.auditAction = action; next(); };
 
 const router = express.Router();
 

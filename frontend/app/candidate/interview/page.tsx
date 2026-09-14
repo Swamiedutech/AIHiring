@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { candidateApi } from "@/lib/api";
 import { useUIStore } from "@/lib/store";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +20,9 @@ import { cn } from "@/lib/utils";
 export default function CandidateInterview() {
   const { setPageTitle } = useUIStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [currentAnalysis, setCurrentAnalysis] = useState<any>(null);
-  const [applicationId, setApplicationId] = useState<string | null>(null);
+  const [applicationId, setApplicationId] = useState<string | null>(searchParams.get('applicationId'));
   const [interviewId, setInterviewId] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
   const [questions, setQuestions] = useState<any[]>([]);
@@ -72,13 +73,13 @@ export default function CandidateInterview() {
   useEffect(() => {
     // Load biometric analysis engine
     const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js";
+    script.src = "/scripts/face-api.min.js";
     script.async = true;
     script.onload = async () => {
       faceApiLoaded.current = true;
       try {
         const faceapi = (window as any).faceapi;
-        const MODEL_URL = "https://justadudewhohacks.github.io/face-api.js/models";
+        const MODEL_URL = "/models";
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
           faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
@@ -371,15 +372,19 @@ export default function CandidateInterview() {
           analyserRef.current = analyser;
 
           const dataArray = new Uint8Array(analyser.frequencyBinCount);
-          const updateVolume = () => {
+          let lastUpdateTime = 0;
+          const updateVolume = (timestamp: number) => {
             if (analyserRef.current) {
-              analyserRef.current.getByteFrequencyData(dataArray);
-              const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-              setAudioLevel(avg);
+              if (timestamp - lastUpdateTime > 100) {
+                analyserRef.current.getByteFrequencyData(dataArray);
+                const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+                setAudioLevel(avg);
+                lastUpdateTime = timestamp;
+              }
               animationFrame = requestAnimationFrame(updateVolume);
             }
           };
-          updateVolume();
+          animationFrame = requestAnimationFrame(updateVolume);
         } catch (e) { console.warn("Audio error", e); }
       }
     }

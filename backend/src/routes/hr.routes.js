@@ -18,7 +18,9 @@ const {
   getInterviewStats,
   getInterviewsList,
   getInterviewDetails,
-  getReadyForInterview
+  getReadyForInterview,
+  updateApplicationStatus,
+  getResume
 } = require("../controllers/hr.controller");
 
 const HRDashboardController = require("../controllers/hrDashboard.controller");
@@ -308,29 +310,7 @@ router.put(
   "/applications/:applicationId",
   auth,
   role(["HR", "ADMIN", "MD"]),
-  async (req, res) => {
-    try {
-      const { applicationId } = req.params;
-      const { status } = req.body;
-
-      const application = await Application.findByPk(applicationId);
-      if (!application) {
-        return res.status(404).json({ message: "Application not found" });
-      }
-
-      application.status = status;
-      await application.save();
-
-      return res.json({
-        success: true,
-        message: "Stage updated successfully"
-      });
-
-    } catch (error) {
-      console.error("Update stage error:", error);
-      return res.status(500).json({ message: error.message });
-    }
-  }
+  updateApplicationStatus
 );
 
 // ===============================
@@ -437,38 +417,13 @@ router.get(
 // RESUME VIEWER (HR/MD)
 // ===============================
 
+
+
 router.get(
   "/resume/:applicationId",
   auth,
   role(["HR", "ADMIN", "MD"]),
-  async (req, res) => {
-    try {
-      const { applicationId } = req.params;
-      const { Application, Candidate } = require("../models");
-
-      const application = await Application.findByPk(applicationId, {
-        include: [{ model: Candidate, attributes: ["resume_path"] }]
-      });
-
-      if (!application || !application.Candidate?.resume_path) {
-        return res.status(404).json({ success: false, message: "Resume not found for this candidate." });
-      }
-
-      const resumeRelPath = application.Candidate.resume_path; // e.g. /uploads/resumes/xyz.pdf
-      const absolutePath = path.join(__dirname, "../../", resumeRelPath);
-
-      if (!fs.existsSync(absolutePath)) {
-        return res.status(404).json({ success: false, message: "Resume file missing on server." });
-      }
-
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `inline; filename="resume_${applicationId}.pdf"`);
-      fs.createReadStream(absolutePath).pipe(res);
-    } catch (error) {
-      console.error("[Resume View] Error:", error.message);
-      return res.status(500).json({ success: false, message: error.message });
-    }
-  }
+  getResume
 );
 
-module.exports = router;
+module.exports = router;

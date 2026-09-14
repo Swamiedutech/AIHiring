@@ -40,7 +40,7 @@ const createWorkflow = async (req, res) => {
     res.json({ success: true, data: _serialize(workflow) });
   } catch (error) {
     console.error("createWorkflow error:", error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 
@@ -80,7 +80,7 @@ const updateWorkflow = async (req, res) => {
     res.json({ success: true, data: _serialize(workflow) });
   } catch (error) {
     console.error("updateWorkflow error:", error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 

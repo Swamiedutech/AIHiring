@@ -144,7 +144,7 @@ class DocumentController {
       return res.status(500).json({
         success: false,
         message: 'Error generating offer letter',
-        error: error.message
+        error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message
       });
     }
   }
@@ -237,7 +237,7 @@ class DocumentController {
       return res.status(500).json({
         success: false,
         message: 'Error generating assessment report',
-        error: error.message
+        error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message
       });
     }
   }
@@ -321,7 +321,7 @@ class DocumentController {
       return res.status(500).json({
         success: false,
         message: 'Error generating interview summary',
-        error: error.message
+        error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message
       });
     }
   }
@@ -377,7 +377,7 @@ class DocumentController {
       return res.status(500).json({
         success: false,
         message: 'Error sending document',
-        error: error.message
+        error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message
       });
     }
   }
@@ -440,7 +440,7 @@ class DocumentController {
       return res.status(500).json({
         success: false,
         message: 'Error downloading document',
-        error: error.message
+        error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message
       });
     }
   }
@@ -497,7 +497,7 @@ class DocumentController {
       return res.status(500).json({
         success: false,
         message: 'Error fetching document details',
-        error: error.message
+        error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message
       });
     }
   }
@@ -548,7 +548,7 @@ class DocumentController {
       return res.status(500).json({
         success: false,
         message: 'Error fetching documents',
-        error: error.message
+        error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message
       });
     }
   }
@@ -613,7 +613,7 @@ class DocumentController {
       return res.status(500).json({
         success: false,
         message: 'Error signing document',
-        error: error.message
+        error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message
       });
     }
   }
@@ -649,7 +649,7 @@ class DocumentController {
       return res.status(500).json({
         success: false,
         message: 'Error archiving document',
-        error: error.message
+        error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message
       });
     }
   }

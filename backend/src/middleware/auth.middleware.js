@@ -13,12 +13,20 @@ module.exports = async (req, res, next) => {
   try {
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET || "your-secret-key"
+      process.env.JWT_SECRET
     );
 
     const user = await User.findByPk(decoded.id);
     if (!user) {
       return res.status(401).json({ message: "User not found" });
+    }
+    
+    if (user.status !== "ACTIVE") {
+      return res.status(403).json({ message: "Account is suspended" });
+    }
+
+    if (decoded.token_version !== user.auth_token_revision) {
+      return res.status(401).json({ message: "Session expired. Please log in again." });
     }
 
     // 🔥 Candidate Session Validation (SAFE VERSION)

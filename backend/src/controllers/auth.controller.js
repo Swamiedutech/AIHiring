@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const { User, Candidate, CandidateSession } = require("../models");
 const { generateToken } = require("../utils/jwt");
@@ -6,16 +7,9 @@ const auditLogger = require("../services/auditLogger.service");
 
 // ================= HELPERS =================
 const sendAuthResponse = (user, token, res, statusCode = 200) => {
-  const cookieOptions = {
-    expires: new Date(Date.now() + 12 * 60 * 60 * 1000), // 12 hours
-    httpOnly: true, // Secure: Inaccessible to client-side JS
-    secure: process.env.NODE_ENV === "production", // HTTPS only in production
-    sameSite: "strict", // CSRF protection
-  };
-
-  res.status(statusCode).cookie("token", token, cookieOptions).json({
+  res.status(statusCode).json({
     success: true,
-    token, // Still sending token in body for backward compatibility
+    token,
     user: {
       id: user.id,
       name: user.name,
@@ -50,7 +44,7 @@ exports.register = async (req, res) => {
           const hashedPassword = await bcrypt.hash(password, 10);
           await existingUser.update({ name, password: hashedPassword });
           
-          const otp = Math.floor(100000 + Math.random() * 900000).toString();
+          const otp = crypto.randomInt(100000, 999999).toString();
           await existingCandidate.update({
             otp,
             otp_expires_at: new Date(Date.now() + 10 * 60 * 1000)
@@ -73,39 +67,48 @@ exports.register = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    const { sequelize } = require('../config/db');
 
-    const user = await User.create({
-      name,
-      email,
-      password: hashedPassword,
-      role: safeRole
-    });
+    const tx = await sequelize.transaction();
+    try {
+      const user = await User.create({
+        name,
+        email,
+        password: hashedPassword,
+        role: safeRole
+      }, { transaction: tx });
 
-    if (role === "CANDIDATE") {
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      if (safeRole === "CANDIDATE") {
+        const otp = crypto.randomInt(100000, 999999).toString();
 
-      const candidate = await Candidate.create({
-        user_id: user.id,
-        education: "Not Provided",
-        specialization: "Not Provided",
-        experience_years: 0,
-        otp,
-        otp_expires_at: new Date(Date.now() + 10 * 60 * 1000),
-        email_verified: false
-      });
+        const candidate = await Candidate.create({
+          user_id: user.id,
+          education: "Not Provided",
+          specialization: "Not Provided",
+          experience_years: 0,
+          otp,
+          otp_expires_at: new Date(Date.now() + 10 * 60 * 1000),
+          email_verified: false
+        }, { transaction: tx });
 
-      try {
-        await sendOTPEmail(email, otp);
-      } catch (err) {
-        console.log(`⚠️ Email sending failed. [DEV MODE] Your OTP is: ${otp}`);
+        try {
+          await sendOTPEmail(email, otp);
+        } catch (err) {
+          console.log(`⚠️ Email sending failed. [DEV MODE] Your OTP is: ${otp}`);
+        }
       }
-    }
 
-    res.status(201).json({
-      message: "Registered successfully. Please verify your email.",
-      requiresOTP: true,
-      email
-    });
+      await tx.commit();
+
+      res.status(201).json({
+        message: "Registered successfully. Please verify your email.",
+        requiresOTP: true,
+        email
+      });
+    } catch (txError) {
+      await tx.rollback();
+      throw txError;
+    }
 
   } catch (error) {
     console.error("Registration error:", error);
@@ -130,9 +133,24 @@ exports.verifyOTP = async (req, res) => {
       return res.status(400).json({ message: "Candidate profile not found" });
     }
 
+    if (user.status !== "ACTIVE") {
+      return res.status(403).json({ message: "Account is suspended" });
+    }
+
+    const failedAttemptsMap = global.otpFailedAttempts || (global.otpFailedAttempts = new Map());
+    const failedAttempts = failedAttemptsMap.get(email) || 0;
+
+    if (failedAttempts >= 5) {
+      await user.update({ status: "SUSPENDED" });
+      return res.status(403).json({ message: "Account locked due to too many failed attempts" });
+    }
+
     if (candidate.otp !== otp) {
+      failedAttemptsMap.set(email, failedAttempts + 1);
       return res.status(400).json({ message: "Invalid OTP" });
     }
+
+    failedAttemptsMap.delete(email);
 
     if (new Date() > candidate.otp_expires_at) {
       return res.status(400).json({ message: "OTP expired" });
@@ -172,7 +190,7 @@ exports.login = async (req, res) => {
         userAgent: req.headers["user-agent"],
         status: "FAILURE",
       });
-      return res.status(404).json({ message: "User not found" });
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -192,6 +210,10 @@ exports.login = async (req, res) => {
     }
 
     // ===== ROLE-SPECIFIC CHECKS =====
+
+    if (user.status !== "ACTIVE") {
+      return res.status(403).json({ message: "Account is suspended" });
+    }
 
     if (user.role === "CANDIDATE") {
       const candidate = await Candidate.findOne({
@@ -214,7 +236,9 @@ exports.login = async (req, res) => {
 
       const token = generateToken({
         id: user.id,
-        role: user.role
+        role: user.role,
+        token_version: user.auth_token_revision,
+        jti: crypto.randomUUID()
       });
 
       await CandidateSession.create({
@@ -244,7 +268,9 @@ exports.login = async (req, res) => {
       if (user.role === "HR" || user.role === "ADMIN" || user.role === "MD") {
         const token = generateToken({
           id: user.id,
-          role: user.role
+          role: user.role,
+          token_version: user.auth_token_revision,
+          jti: crypto.randomUUID()
         });
 
         // Audit: successful HR/Admin/MD login
@@ -266,11 +292,17 @@ exports.login = async (req, res) => {
 // ================= UPDATE PROFILE =================
 exports.updateProfile = async (req, res) => {
   try {
-    const { name, email } = req.body;
-    const user = await User.findByPk(req.user.id);
+    const { name, email, currentPassword } = req.body;
+    const user = await User.unscoped().findByPk(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
     if (email && email !== user.email) {
+      if (!currentPassword) {
+        return res.status(400).json({ message: "Current password is required to change email" });
+      }
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatch) return res.status(401).json({ message: "Invalid current password" });
+
       const exists = await User.findOne({ where: { email } });
       if (exists) return res.status(400).json({ message: "Email already in use" });
     }
@@ -288,7 +320,11 @@ exports.changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) return res.status(400).json({ message: "Both fields required" });
-    if (newPassword.length < 6) return res.status(400).json({ message: "New password must be at least 6 characters" });
+
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      return res.status(400).json({ message: "Password must be at least 8 characters and contain at least one uppercase letter, one lowercase letter, one number, and one special character" });
+    }
 
     const user = await User.unscoped().findByPk(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -296,9 +332,11 @@ exports.changePassword = async (req, res) => {
     const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) return res.status(401).json({ message: "Current password is incorrect" });
 
-    const hashed = await bcrypt.hash(newPassword, 10);
-    await user.update({ password: hashed });
-    res.json({ message: "Password changed successfully" });
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    const newTokenVersion = (user.auth_token_revision || 0) + 1;
+    await user.update({ password: hashedNewPassword, auth_token_revision: newTokenVersion });
+
+    res.json({ message: "Password changed successfully. You have been logged out of other devices." });
   } catch (error) {
     console.error("Password change error:", error);
     res.status(500).json({ error: "Password change failed." });
@@ -316,7 +354,7 @@ exports.resendOTP = async (req, res) => {
     if (!candidate) return res.status(400).json({ message: "Candidate profile not found" });
     if (candidate.email_verified) return res.status(400).json({ message: "Email already verified" });
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otp = crypto.randomInt(100000, 999999).toString();
     await candidate.update({
       otp,
       otp_expires_at: new Date(Date.now() + 10 * 60 * 1000),
@@ -333,6 +371,12 @@ exports.resendOTP = async (req, res) => {
 // ================= LOGOUT =================
 exports.logout = async (req, res) => {
   try {
+    const user = await User.unscoped().findByPk(req.user.id);
+    if (user) {
+      const newTokenVersion = (user.auth_token_revision || 0) + 1;
+      await user.update({ auth_token_revision: newTokenVersion });
+    }
+
     const candidate = await Candidate.findOne({
       where: { user_id: req.user.id }
     });

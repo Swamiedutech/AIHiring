@@ -146,7 +146,7 @@ exports.generateCandidateReport = async (req, res) => {
 
     const [application, attempt, assmAnalysis, malpractice, auditLogs] = await Promise.all([
       Application.findByPk(applicationId, {
-        include: [{ model: Candidate, include: [User] }, { model: Job }]
+        include: [{ model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }, { model: Job }]
       }),
       AssessmentAttempt.findOne({
         where: { application_id: applicationId },
@@ -241,15 +241,22 @@ exports.generateCandidateReport = async (req, res) => {
 
     // Save Record to DB (async)
     const { DocumentRecord } = require('../models');
-    DocumentRecord.create({
-      application_id: applicationId,
-      document_type: 'ASSESSMENT_REPORT',
-      file_name: `Assessment_Report_${candidateName.replace(/\s+/g, '_')}_App${applicationId}.pdf`,
-      file_path: `/reports/assessment/${applicationId}.pdf`,
-      file_size: 1500000, // Estimate
-      file_type: 'application/pdf',
-      generated_at: new Date()
-    }).catch(err => console.error('Failed to save document record:', err));
+    DocumentRecord.findOne({ where: { application_id: applicationId, document_type: 'ASSESSMENT_REPORT' } })
+      .then(existing => {
+        if (existing) {
+          return existing.update({ generated_at: new Date(), file_size: 1500000 });
+        }
+        return DocumentRecord.create({
+          application_id: applicationId,
+          document_type: 'ASSESSMENT_REPORT',
+          file_name: `Assessment_Report_${candidateName.replace(/\s+/g, '_')}_App${applicationId}.pdf`,
+          file_path: `/reports/assessment/${applicationId}.pdf`,
+          file_size: 1500000,
+          file_type: 'application/pdf',
+          generated_at: new Date()
+        });
+      })
+      .catch(err => console.error('Failed to save document record:', err));
 
     // ════════════════════════════════════════════════════
     //  PAGE 1 — CANDIDATE SUMMARY
@@ -583,7 +590,7 @@ exports.generateInterviewReport = async (req, res) => {
 
     const [application, session, analysis, malpractice, auditLogs] = await Promise.all([
       Application.findByPk(applicationId, {
-        include: [{ model: Candidate, include: [User] }, { model: Job }]
+        include: [{ model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }, { model: Job }]
       }),
       InterviewSession.findOne({
         where: { application_id: applicationId },
@@ -613,15 +620,22 @@ exports.generateInterviewReport = async (req, res) => {
 
     // Save Record to DB (async)
     const { DocumentRecord } = require('../models');
-    DocumentRecord.create({
-      application_id: applicationId,
-      document_type: 'INTERVIEW_TRANSCRIPT',
-      file_name: `Interview_Report_${candidateName.replace(/\s+/g, '_')}_App${applicationId}.pdf`,
-      file_path: `/reports/interview/${applicationId}.pdf`,
-      file_size: 1600000, // Estimate
-      file_type: 'application/pdf',
-      generated_at: new Date()
-    }).catch(err => console.error('Failed to save document record:', err));
+    DocumentRecord.findOne({ where: { application_id: applicationId, document_type: 'INTERVIEW_TRANSCRIPT' } })
+      .then(existing => {
+        if (existing) {
+          return existing.update({ generated_at: new Date(), file_size: 1600000 });
+        }
+        return DocumentRecord.create({
+          application_id: applicationId,
+          document_type: 'INTERVIEW_TRANSCRIPT',
+          file_name: `Interview_Report_${candidateName.replace(/\s+/g, '_')}_App${applicationId}.pdf`,
+          file_path: `/reports/interview/${applicationId}.pdf`,
+          file_size: 1600000,
+          file_type: 'application/pdf',
+          generated_at: new Date()
+        });
+      })
+      .catch(err => console.error('Failed to save document record:', err));
 
     // ════════════════════════════════════════════════════
     //  PAGE 1 — CANDIDATE SUMMARY
@@ -905,7 +919,7 @@ exports.generateExecutiveReport = async (req, res) => {
     const { applicationId } = req.params;
     const [application, analysis, session] = await Promise.all([
       Application.findByPk(applicationId, {
-        include: [{ model: Candidate, include: [User] }, { model: Job }]
+        include: [{ model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }, { model: Job }]
       }),
       InterviewAnalysis.findOne({ where: { application_id: applicationId } }),
       InterviewSession.findOne({
@@ -1059,7 +1073,7 @@ exports.getReportStats = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching report stats:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 
@@ -1069,7 +1083,12 @@ exports.getReportStats = async (req, res) => {
  */
 exports.getReportsList = async (req, res) => {
   try {
-    const records = await DocumentRecord.findAll({
+    const { page = 1, limit = 20 } = req.query;
+    const offset = (page - 1) * limit;
+
+    const { count, rows: records } = await DocumentRecord.findAndCountAll({
+      limit: parseInt(limit),
+      offset: parseInt(offset),
       include: [
         {
           model: Application,
@@ -1097,11 +1116,15 @@ exports.getReportsList = async (req, res) => {
 
     res.json({
       success: true,
+      count: results.length,
+      total: count,
+      totalPages: Math.ceil(count / limit),
+      currentPage: parseInt(page),
       data: results
     });
   } catch (error) {
     console.error('Error listing reports:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 
@@ -1118,7 +1141,7 @@ exports.getRecentDownloads = async (req, res) => {
       include: [
         {
           model: Application,
-          include: [{ model: Candidate, include: [User] }]
+          include: [{ model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }]
         }
       ],
       order: [['viewed_at', 'DESC']],
@@ -1137,7 +1160,7 @@ exports.getRecentDownloads = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching recent downloads:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 

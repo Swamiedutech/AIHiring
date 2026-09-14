@@ -9,7 +9,10 @@ class TalentPoolController {
    */
   static async getTalentPool(req, res) {
     try {
-      const { search = "", tab = "All", page = 1, limit = 10 } = req.query;
+      let { search = "", tab = "All", page = 1, limit = 10 } = req.query;
+      page = parseInt(page) || 1;
+      limit = parseInt(limit) || 10;
+      if (limit > 100) limit = 100;
       const offset = (page - 1) * limit;
 
       // 1. Base counts
@@ -27,10 +30,12 @@ class TalentPoolController {
       let appWhere = {};
 
       if (search) {
+        const searchEscaped = search.replace(/'/g, "''");
         candidateWhere[Op.or] = [
           { location: { [Op.iLike]: `%${search}%` } },
-          { summary: { [Op.iLike]: `%${search}%` } },
-          { parsed_resume: { [Op.iLike]: `%${search}%` } }
+          { '$User.name$': { [Op.iLike]: `%${search}%` } },
+          Candidate.sequelize.literal(`to_tsvector('english', COALESCE("Candidate"."parsed_resume"::text, '')) @@ plainto_tsquery('english', '${searchEscaped}')`),
+          Candidate.sequelize.literal(`to_tsvector('english', COALESCE("Candidate"."summary"::text, '')) @@ plainto_tsquery('english', '${searchEscaped}')`)
         ];
       }
 
@@ -49,8 +54,8 @@ class TalentPoolController {
         include: [
           { 
             model: User, 
-            attributes: ['name', 'email'],
-            where: search ? { name: { [Op.iLike]: `%${search}%` } } : {}
+            attributes: ['name', 'email']
+            // removed the broken AND condition here
           },
           { 
             model: Application, 

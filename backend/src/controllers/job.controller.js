@@ -3,7 +3,16 @@ const { Job } = require("../models");
 // ADMIN: Create Job
 exports.createJob = async (req, res) => {
   try {
-    const job = await Job.create(req.body);
+    const {
+      title, department, location, employment_type,
+      description, requirements, min_experience, max_experience,
+      salary_min, salary_max, currency, status, valid_till
+    } = req.body;
+    const job = await Job.create({
+      title, department, location, employment_type,
+      description, requirements, min_experience, max_experience,
+      salary_min, salary_max, currency, status, valid_till
+    });
     res.status(201).json({ message: "Job created successfully", job });
   } catch (error) {
     res.status(400).json({ error: "Bad request", details: error.message });

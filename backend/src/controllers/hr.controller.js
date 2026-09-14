@@ -18,7 +18,7 @@ const { buildAssetUrl } = require('../utils/urlHelper');
 ============================= */
 exports.getAllApplications = async (req, res) => {
   try {
-    const { search, role, status } = req.query;
+    const { search, role, status, page = 1, limit = 20 } = req.query;
     const { Op } = require("sequelize");
 
     let where = {};
@@ -37,20 +37,25 @@ exports.getAllApplications = async (req, res) => {
       candidateWhere['$User.name$'] = { [Op.iLike]: `%${search}%` };
     }
 
-    const applications = await Application.findAll({
+    const offset = (page - 1) * limit;
+
+    const { count: totalCount, rows: applications } = await Application.findAndCountAll({
       where,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
       include: [
         { 
           model: Candidate, 
           where: Object.keys(candidateWhere).length > 0 ? candidateWhere : undefined,
-          include: [User] 
+          include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] 
         },
         { model: Job, where: Object.keys(jobWhere).length > 0 ? jobWhere : undefined },
         { model: TechnicalRound, attributes: ['score'] },
         { model: AssessmentAnalysis, attributes: ['overall_score'] },
         { model: InterviewSession, as: 'interview_session', attributes: ['overall_score'] }
       ],
-      order: [["created_at", "DESC"]]
+      order: [["created_at", "DESC"]],
+      distinct: true
     });
 
     const { computeApplicationScore } = require('../utils/applicationStatus.utils');
@@ -128,11 +133,14 @@ exports.getAllApplications = async (req, res) => {
 
     res.json({
       success: true,
-      count: mapped.length,
+      count: mapped.length, // Items in current page
+      total: totalCount, // Total items matching query
+      totalPages: Math.ceil(totalCount / limit),
+      currentPage: parseInt(page),
       data: mapped
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : err.message });
   }
 };
 
@@ -227,7 +235,7 @@ exports.getAssessmentStats = async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching assessment stats:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 
@@ -290,7 +298,7 @@ exports.getReadyForInterview = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching ready for interview:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 
@@ -319,24 +327,39 @@ exports.getAssessmentsList = async (req, res) => {
       raw: true
     });
 
-    const results = await Promise.all(jobs.map(async (job) => {
-      // Get completion stats for this job
-      const stats = await AssessmentAttempt.findOne({
-        attributes: [
-          [sequelize.fn('COUNT', sequelize.col('AssessmentAttempt.id')), 'totalCompleted'],
-          [sequelize.fn('AVG', sequelize.col('final_score')), 'avgScore']
-        ],
-        include: [{
-          model: Application,
-          where: { job_id: job.id },
-          attributes: []
-        }],
-        where: { status: 'EVALUATED' },
-        raw: true
-      });
+    const statsByJob = await AssessmentAttempt.findAll({
+      attributes: [
+        [sequelize.col('Application.job_id'), 'job_id'],
+        [sequelize.fn('COUNT', sequelize.col('AssessmentAttempt.id')), 'totalCompleted'],
+        [sequelize.fn('AVG', sequelize.col('final_score')), 'avgScore']
+      ],
+      include: [{
+        model: Application,
+        attributes: []
+      }],
+      where: { status: 'EVALUATED' },
+      group: ['Application.job_id'],
+      raw: true
+    });
 
-      // Find total applications to get a ratio
-      const totalApps = await Application.count({ where: { job_id: job.id } });
+    const appsByJob = await Application.findAll({
+      attributes: [
+        'job_id',
+        [sequelize.fn('COUNT', sequelize.col('id')), 'totalApps']
+      ],
+      group: ['job_id'],
+      raw: true
+    });
+
+    const statsMap = {};
+    statsByJob.forEach(s => { statsMap[s.job_id] = s; });
+    
+    const appsMap = {};
+    appsByJob.forEach(a => { appsMap[a.job_id] = a; });
+
+    const results = jobs.map((job) => {
+      const stats = statsMap[job.id] || { totalCompleted: 0, avgScore: 0 };
+      const totalApps = appsMap[job.id] ? parseInt(appsMap[job.id].totalApps) : 0;
 
       return {
         id: job.id,
@@ -351,7 +374,7 @@ exports.getAssessmentsList = async (req, res) => {
         score: stats?.avgScore ? `${Math.round(stats.avgScore)}%` : '-',
         icon: job.department === 'Technical' ? 'Zap' : 'Brain'
       };
-    }));
+    });
 
     res.json({
       success: true,
@@ -359,7 +382,7 @@ exports.getAssessmentsList = async (req, res) => {
     });
   } catch (error) {
     console.error('Error listing assessments:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 
@@ -407,7 +430,7 @@ exports.getAssessmentDetails = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching assessment details:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 
@@ -484,7 +507,7 @@ exports.updateDecision = async (req, res) => {
     });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? "Internal server error" : err.message });
   }
 };
 
@@ -514,7 +537,7 @@ exports.getDashboardSummary = async (req, res) => {
       completedTechRounds
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? "Internal server error" : err.message });
   }
 };
 
@@ -534,7 +557,7 @@ exports.getTechnicalRounds = async (req, res) => {
 
     res.json(rounds);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? "Internal server error" : err.message });
   }
 };
 
@@ -552,7 +575,7 @@ exports.sendOfferLetter = async (req, res) => {
     const { salary, joining_date, designation } = req.body;
 
     const application = await Application.findByPk(applicationId, {
-      include: [{ model: Candidate, include: [User] }, Job]
+      include: [{ model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }, Job]
     });
 
     if (!application) {
@@ -565,8 +588,17 @@ exports.sendOfferLetter = async (req, res) => {
     // Create offer record
     try {
       const { Offer } = require("../models");
-      // Delete existing offer if any to avoid duplicates
-      await Offer.destroy({ where: { application_id: applicationId } });
+      
+      // Check if there's already an accepted offer
+      const acceptedOffer = await Offer.findOne({
+        where: { application_id: applicationId, status: ["ACCEPTED", "HIRED"] }
+      });
+      if (acceptedOffer) {
+        return res.status(400).json({ success: false, message: "Cannot overwrite an accepted offer." });
+      }
+
+      // Archive existing pending offers instead of deleting to fix Issue #2
+      await Offer.update({ status: 'SUPERSEDED' }, { where: { application_id: applicationId, status: 'PENDING' } });
       
       await Offer.create({
         application_id: applicationId,
@@ -625,7 +657,7 @@ exports.sendOfferLetter = async (req, res) => {
     res.status(500).json({ 
       success: false,
       message: "Error sending offer letter",
-      error: error.message 
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message 
     });
   }
 };
@@ -640,7 +672,7 @@ exports.sendRejectionEmail = async (req, res) => {
     const { reason } = req.body;
 
     const application = await Application.findByPk(applicationId, {
-      include: [{ model: Candidate, include: [User] }, Job]
+      include: [{ model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }, Job]
     });
 
     if (!application) {
@@ -691,7 +723,7 @@ exports.sendRejectionEmail = async (req, res) => {
     res.status(500).json({ 
       success: false,
       message: "Error sending rejection",
-      error: error.message 
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message 
     });
   }
 };
@@ -706,7 +738,7 @@ exports.scheduleInterview = async (req, res) => {
     const { interview_date, interview_time, interviewer, interview_type } = req.body;
 
     const application = await Application.findByPk(applicationId, {
-      include: [{ model: Candidate, include: [User] }, Job]
+      include: [{ model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }, Job]
     });
 
     if (!application) {
@@ -796,7 +828,7 @@ exports.scheduleInterview = async (req, res) => {
     res.status(500).json({ 
       success: false,
       message: "Error scheduling interview",
-      error: error.message 
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message 
     });
   }
 };
@@ -860,7 +892,7 @@ exports.addInternalNote = async (req, res) => {
     res.status(500).json({ 
       success: false,
       message: "Error adding internal note",
-      error: error.message 
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message 
     });
   }
 };
@@ -900,7 +932,7 @@ exports.getInterviewStats = async (req, res) => {
       where: { status: 'COMPLETED' },
       include: [{
         model: Application,
-        include: [{ model: Candidate, include: [User] }]
+        include: [{ model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }]
       }],
       order: [['created_at', 'DESC']],
       limit: 3
@@ -931,7 +963,7 @@ exports.getInterviewStats = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching interview stats:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 
@@ -977,7 +1009,7 @@ exports.getInterviewsList = async (req, res) => {
     });
   } catch (error) {
     console.error('Error listing interviews:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 
@@ -994,7 +1026,7 @@ exports.getInterviewDetails = async (req, res) => {
       include: [
         {
           model: Application,
-          include: [Job, { model: Candidate, include: [User] }]
+          include: [Job, { model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }]
         }
       ]
     });
@@ -1010,11 +1042,81 @@ exports.getInterviewDetails = async (req, res) => {
       data: {
         session,
         analysis: analysis || null,
-        qaPairs: analysis?.qa_pairs || session.answers_provided || []
+        qaPairs: analysis?.qa_pairs || session.answers_provided || [],
+        candidate: {
+          name: session.Application?.Candidate?.User?.name,
+          email: session.Application?.Candidate?.User?.email,
+          job_title: session.Application?.Job?.title,
+          resume: buildAssetUrl(session.Application?.Candidate?.resume_path),
+          profile_image: buildAssetUrl(session.Application?.Candidate?.profile_image_path, "/images/default-avatar.png")
+        }
       }
     });
   } catch (error) {
     console.error('Error fetching interview details:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
+  }
+};
+
+/**
+ * Update Application Status
+ * PUT /hr/applications/:applicationId
+ */
+exports.updateApplicationStatus = async (req, res) => {
+  try {
+    const { Application } = require("../models");
+    const { applicationId } = req.params;
+    const { status } = req.body;
+
+    const application = await Application.findByPk(applicationId);
+    if (!application) {
+      return res.status(404).json({ message: "Application not found" });
+    }
+
+    application.status = status;
+    await application.save();
+
+    return res.json({
+      success: true,
+      message: "Stage updated successfully"
+    });
+  } catch (error) {
+    console.error("Update stage error:", error);
+    return res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
+  }
+};
+
+/**
+ * Get Candidate Resume
+ * GET /hr/resume/:applicationId
+ */
+exports.getResume = async (req, res) => {
+  try {
+    const { applicationId } = req.params;
+    const { Application, Candidate } = require("../models");
+    const path = require('path');
+    const fs = require('fs');
+
+    const application = await Application.findByPk(applicationId, {
+      include: [{ model: Candidate, attributes: ["resume_path"] }]
+    });
+
+    if (!application || !application.Candidate?.resume_path) {
+      return res.status(404).json({ success: false, message: "Resume not found for this candidate." });
+    }
+
+    const resumeRelPath = application.Candidate.resume_path;
+    const absolutePath = path.join(__dirname, "../../", resumeRelPath);
+
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({ success: false, message: "Resume file missing on server." });
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="resume_${applicationId}.pdf"`);
+    fs.createReadStream(absolutePath).pipe(res);
+  } catch (error) {
+    console.error("[Resume View] Error:", error.message);
+    return res.status(500).json({ success: false, message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };

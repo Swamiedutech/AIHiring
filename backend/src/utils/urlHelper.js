@@ -6,7 +6,7 @@
  *   const imgUrl = buildAssetUrl(candidate.profile_image_path);
  */
 
-const BACKEND_URL = (process.env.BACKEND_URL || 'http://localhost:5000').replace(/\/+$/, '');
+const BACKEND_URL = (process.env.BACKEND_URL || '').replace(/\/+$/, '');
 
 /**
  * Returns the backend base URL (no trailing slash).

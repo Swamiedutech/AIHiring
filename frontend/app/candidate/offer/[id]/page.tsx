@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-
+import DOMPurify from 'isomorphic-dompurify';
 export default function OfferLetterPage() {
    const params = useParams();
    const applicationId = String(params.id);
@@ -130,7 +130,7 @@ export default function OfferLetterPage() {
                   <div className="p-6 lg:p-14">
                      <div
                         className="prose prose-slate max-w-none prose-p:text-slate-600 prose-p:leading-relaxed prose-strong:text-slate-900 prose-h4:text-slate-900"
-                        dangerouslySetInnerHTML={{ __html: offer.offer_letter_content }}
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(offer.offer_letter_content) }}
                      />
                   </div>
                </Card>

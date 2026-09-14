@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const helmet = require("helmet");
+const cookieParser = require("cookie-parser");
 const { authLimiter, aiLimiter, generalLimiter } = require("./middleware/rateLimiter.middleware");
 const { globalErrorHandler, notFoundHandler } = require("./middleware/errorHandler.middleware");
 
@@ -11,8 +12,7 @@ const applicationRoutes = require("./routes/application.routes");
 const resumeRoutes = require("./routes/resume.routes");
 const hrRoutes = require("./routes/hr.routes");
 console.log("✅ hr.routes loaded");
-// TODO: mcq.routes file not yet created - commented out until it exists
-// const mcqRoutes = require("./routes/mcq.routes");
+
 const assessmentRoutes = require("./routes/assessment.routes"); 
 const adminRoutes = require("./routes/admin.routes");
 const interviewPhase5Routes = require("./routes/interviewPhase5.routes");
@@ -52,34 +52,30 @@ app.use(helmet({
 }));
 app.use(generalLimiter);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  })
-);
-
-app.options(/.*/, cors({
+const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || ALLOWED_ORIGINS.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error("Not allowed by CORS"));
+      callback(null, false);
     }
   },
   credentials: true,
-}));
+};
 
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
+
+app.use(cookieParser());
 app.use(express.json());
 
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "UP", timestamp: new Date() });
+});
+
 /* ================= STATIC FILES ================= */
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Replaced insecure static file serving with an authenticated route
+app.use('/uploads', require('./routes/file.routes'));
 
 
 app.use((req, res, next) => {
@@ -96,8 +92,7 @@ app.use("/api/candidate", candidateRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/dashboard/candidate", candidateDashboardRoutes);
 
-// TODO: MCQ routes commented out until mcq.routes file exists
-// app.use("/api/mcq", mcqRoutes);              // Old MCQ system
+
 app.use("/api/assessment", assessmentRoutes); // 🔥 NEW Production MCQ Engine
 
 app.use("/api/hr", candidateProfileRoutes);

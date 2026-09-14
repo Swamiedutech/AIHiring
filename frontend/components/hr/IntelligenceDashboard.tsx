@@ -15,7 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { BACKEND_URL } from "@/lib/api";
+import { BACKEND_URL, getFileUrl } from "@/lib/api";
 
 interface CandidateIntelligenceProps {
   profileData: any;
@@ -33,7 +33,7 @@ export default function CandidateIntelligence({ profileData }: CandidateIntellig
   const location = candidate?.location || "N/A";
   const experience = candidate?.experience_years || "N/A";
   const score = Math.round(application?.overall_score || candidate?.ai_score || 0);
-  const avatar = candidate?.profileImage || candidate?.profile_image_path ? `${BACKEND_URL}${candidate.profile_image_path.startsWith('/') ? '' : '/'}${candidate.profile_image_path}` : "/images/default-avatar.png";
+  const avatar = candidate?.profileImage || candidate?.profile_image_path ? getFileUrl(candidate.profile_image_path) : "/images/default-avatar.png";
 
   // Adaptive Skill Data
   const skills = Array.isArray(candidate?.skills) ? candidate.skills : [];

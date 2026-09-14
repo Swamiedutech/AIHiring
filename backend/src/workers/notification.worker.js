@@ -34,12 +34,27 @@ class NotificationWorker {
     this.isProcessing = true;
 
     try {
-      const pendingNotifications = await NotificationQueue.findAll({
-        where: {
-          status: "PENDING",
-          retry_count: { [require("sequelize").Op.lt]: 3 }
-        },
-        limit: 10
+      const { sequelize } = require("../models");
+      const pendingNotifications = await sequelize.transaction(async (t) => {
+        const rows = await NotificationQueue.findAll({
+          where: {
+            status: "PENDING",
+            retry_count: { [require("sequelize").Op.lt]: 3 }
+          },
+          limit: 10,
+          lock: true,
+          skipLocked: true,
+          transaction: t
+        });
+
+        if (rows.length > 0) {
+          const ids = rows.map(r => r.id);
+          await NotificationQueue.update(
+            { status: "PROCESSING" },
+            { where: { id: ids }, transaction: t }
+          );
+        }
+        return rows;
       });
 
       if (pendingNotifications.length === 0) {

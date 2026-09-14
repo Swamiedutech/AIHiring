@@ -5,7 +5,7 @@
 
 const { Application, AssessmentAttempt, User, ApplicationStatusLog, MalpracticeEvent, Candidate, Job, InterviewSession } = require('../models');
 const { BehavioralAnalyzer, AnomalyDetector, IntegrityValidator } = require('../utils/proctoring.utils');
-const { sendEmail } = require('../utils/emailService');
+const { sendEmail } = require('../services/email.service');
 const crypto = require('crypto');
 
 // ==================== PROCTORING CONTROLLER ====================
@@ -90,9 +90,13 @@ class ProctoringController {
           anti_cheating_data: proctoringData
         });
       } else {
+        const existingData = attempt.anti_cheating_data || proctoringData;
+        if (attempt.status === 'IN_PROGRESS' && attempt.anti_cheating_data) {
+           // We just keep existing data and do not error out for page reloads
+        }
         await attempt.update({
           status: 'IN_PROGRESS',
-          anti_cheating_data: proctoringData
+          anti_cheating_data: existingData
         });
       }
 
@@ -254,21 +258,7 @@ class ProctoringController {
       proctoringData.audioDetections = proctoringData.audioDetections || [];
       proctoringData.videoMetrics = proctoringData.videoMetrics || {};
 
-      // Analyze audio for voices
-      if (audioData) {
-        const audioAnalysis = ProctoringController._analyzeAudio(audioData);
-
-        if (audioAnalysis.voiceDetected && audioAnalysis.voiceCount > 1) {
-          proctoringData.audioDetections.push({
-            timestamp: new Date(),
-            voiceCount: audioAnalysis.voiceCount,
-            confidence: audioAnalysis.confidence,
-            severity: 'HIGH',
-            message: `${audioAnalysis.voiceCount} voices detected (only 1 candidate allowed)`
-          });
-        }
-      }
-
+      // Audio analysis removed as it is currently a stub
       // Monitor video metrics
       if (videoMetrics) {
         const videoAnalysis = ProctoringController._analyzeVideo(videoMetrics);
@@ -462,7 +452,7 @@ class ProctoringController {
       // Update application status
       const application = await Application.findByPk(attempt.application_id, {
         include: [
-          { model: Candidate, include: [User] },
+          { model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] },
           { model: Job }
         ]
       });
@@ -677,18 +667,6 @@ class ProctoringController {
     };
   }
 
-  /**
-   * Analyze audio for multiple speakers
-   */
-  static _analyzeAudio(audioData) {
-    // Simplified audio analysis
-    return {
-      voiceDetected: true,
-      voiceCount: 1,
-      confidence: 0.95,
-      frequencies: []
-    };
-  }
 
   /**
    * Analyze video metrics
@@ -708,12 +686,12 @@ class ProctoringController {
    */
   static _checkEventCriticality(eventType, eventData, proctoringData) {
     const criticalEvents = {
-      'WINDOW_BLUR': { severity: 'HIGH', message: 'Focus lost from exam window' },
+      'TAB_SWITCH': { severity: 'HIGH', message: 'Focus lost from exam window' },
       'PRINT_ATTEMPT': { severity: 'CRITICAL', message: 'Print attempt detected' },
       'COPY_PASTE': { severity: 'HIGH', message: 'Copy/paste attempt detected' },
       'RIGHT_CLICK': { severity: 'MEDIUM', message: 'Right-click detected' },
       'DEVELOPER_TOOLS': { severity: 'CRITICAL', message: 'Developer tools opened' },
-      'FULL_SCREEN_EXIT': { severity: 'HIGH', message: 'Exited fullscreen mode' }
+      'FULLSCREEN_EXIT': { severity: 'HIGH', message: 'Exited fullscreen mode' }
     };
 
     if (criticalEvents[eventType]) {

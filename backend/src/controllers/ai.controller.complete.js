@@ -397,9 +397,16 @@ exports.analyzeCodingAssessment = async (req, res) => {
 
     logger.info(`Analyzing coding solution for application ${applicationId}`);
 
-    // Analyze with AI service
-    const analysis = await aiService.analyzeCodingSolution(code, problemDescription);
-    const aiScore = analysis.overall_score || 0;
+    // Analyze with AI service (with 15s timeout)
+    const analyzePromise = aiService.analyzeCodingSolution(code, problemDescription);
+    let timerId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timerId = setTimeout(() => reject(new Error('AI grading timeout')), 15000);
+    });
+    const analysis = await Promise.race([analyzePromise, timeoutPromise]).finally(() => clearTimeout(timerId));
+    
+    const clamp = (val) => isNaN(Number(val)) ? 0 : Math.min(100, Math.max(0, Number(val)));
+    const aiScore = clamp(analysis.overall_score);
 
     // ML Validation Layer (Cosine Similarity)
     const similarityScore = scoringService.calculateCosineSimilarity(code, problemDescription);
@@ -411,20 +418,20 @@ exports.analyzeCodingAssessment = async (req, res) => {
       assessment_type: 'coding',
       test_name: testName || 'Coding Challenge',
       candidate_response: { code, problemDescription },
-      overall_score: hybridScore,
-      correctness_score: analysis.correctness_score,
-      code_quality_score: analysis.code_quality_score,
-      efficiency_score: analysis.efficiency_score,
-      time_complexity: analysis.time_complexity,
-      space_complexity: analysis.space_complexity,
-      strengths: analysis.strengths,
-      weaknesses: analysis.weaknesses,
-      improvement_areas: analysis.optimization_suggestions,
-      estimated_skill_level: analysis.skill_level,
-      estimated_years_experience: analysis.estimated_experience_years,
-      detailed_feedback: analysis.detailed_feedback,
-      follow_up_questions: analysis.recommendations,
-      ai_model_used: 'gemini-2.0-flash-hybrid'
+      overall_score: clamp(hybridScore),
+      correctness_score: clamp(analysis.correctness_score),
+      code_quality_score: clamp(analysis.code_quality_score),
+      efficiency_score: clamp(analysis.efficiency_score),
+      time_complexity: analysis.time_complexity || 'O(N)',
+      space_complexity: analysis.space_complexity || 'O(N)',
+      strengths: analysis.strengths || [],
+      weaknesses: analysis.weaknesses || [],
+      improvement_areas: analysis.optimization_suggestions || [],
+      estimated_skill_level: analysis.skill_level || 'Intermediate',
+      estimated_years_experience: analysis.estimated_experience_years || 1,
+      detailed_feedback: analysis.detailed_feedback || analysis.feedback,
+      follow_up_questions: analysis.recommendations || [],
+      ai_model_used: analysis.model_used || 'gemini-2.5-flash'
     });
 
     const { AssessmentAttempt } = require('../models');
@@ -506,12 +513,19 @@ exports.analyzeMCQAssessment = async (req, res) => {
 
     logger.info(`Analyzing MCQ responses for application ${applicationId}`);
 
-    // Analyze with AI service
-    const analysis = await aiService.analyzeMCQTest(questions, answers);
+    // Analyze with AI service (with 15s timeout)
+    const analyzePromise = aiService.analyzeMCQTest(questions, answers);
+    let timerId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timerId = setTimeout(() => reject(new Error('AI grading timeout')), 15000);
+    });
+    const analysis = await Promise.race([analyzePromise, timeoutPromise]).finally(() => clearTimeout(timerId));
+    
+    const clamp = (val) => isNaN(Number(val)) ? 0 : Math.min(100, Math.max(0, Number(val)));
 
     // Hybrid Integration: For MCQ, AI is used for qualitative feedback, 
     // while the score is strictly deterministic.
-    const score = (analysis.score_percentage / 100) * 100;
+    const score = clamp((analysis.overall_score / 100) * 100);
 
     // Store assessment analysis
     const assessmentAnalysis = await AssessmentAnalysis.create({
@@ -521,17 +535,17 @@ exports.analyzeMCQAssessment = async (req, res) => {
       total_questions: questions.length,
       candidate_response: { answers },
       overall_score: score,
-      correctness_score: analysis.score_percentage,
-      correct_answers: analysis.correct_answers,
-      incorrect_answers: (questions.length - analysis.correct_answers),
+      correctness_score: clamp(analysis.overall_score),
+      correct_answers: clamp(analysis.accuracy),
+      incorrect_answers: Math.max(0, questions.length - clamp(analysis.accuracy)),
       unattempted: 0,
-      topic_scores: analysis.topics_strengths ? { strengths: analysis.topics_strengths } : {},
-      strengths: analysis.topics_strengths || [],
-      weaknesses: analysis.topics_weaknesses || [],
-      improvement_areas: analysis.learning_recommendations || [],
-      estimated_skill_level: analysis.estimated_skill_level,
-      detailed_feedback: analysis.detailed_feedback || `Score: ${analysis.score_percentage}%`,
-      ai_model_used: 'gemini-2.0-flash-hybrid'
+      topic_scores: analysis.strong_topics ? { strengths: analysis.strong_topics } : {},
+      strengths: analysis.strong_topics || [],
+      weaknesses: analysis.weak_topics || [],
+      improvement_areas: analysis.feedback ? [analysis.feedback] : [],
+      estimated_skill_level: analysis.concept_understanding > 80 ? 'Advanced' : 'Intermediate',
+      detailed_feedback: analysis.feedback || `Score: ${score}%`,
+      ai_model_used: analysis.model_used || 'gemini-2.5-flash'
     });
 
     const { AssessmentAttempt } = require('../models');
@@ -675,7 +689,8 @@ exports.analyzeInterview = async (req, res) => {
       jobSkills
     });
 
-    const aiScore = analysis.overall_assessment?.overall_score || 0;
+    const clamp = (val) => isNaN(Number(val)) ? 0 : Math.min(100, Math.max(0, Number(val)));
+    const aiScore = clamp(analysis.overall_assessment?.overall_score);
 
     // ML Validation Layer (TF-IDF + Cosine Similarity)
     const referenceText = questions ? JSON.stringify(questions) : "Job Requirements and Technical Skills";
@@ -702,12 +717,12 @@ exports.analyzeInterview = async (req, res) => {
       interview_type: toValidInterviewType(interviewType),
       transcript: transcript.substring(0, 10000),
       qa_pairs: analysis.qa_analyses || [],
-      overall_score: Math.min(100, Math.max(0, hybridScore)),
-      technical_knowledge_score: analysis.metrics?.technical_knowledge || Math.round(hybridScore * 0.8),
-      problem_solving_score: analysis.metrics?.problem_solving || Math.round(hybridScore * 0.7),
-      communication_score: analysis.metrics?.communication || Math.round(hybridScore * 0.9),
-      soft_skills_score: analysis.metrics?.soft_skills || Math.round(hybridScore * 0.6),
-      cultural_fit_score: analysis.metrics?.cultural_fit || Math.round(hybridScore * 0.5),
+      overall_score: clamp(hybridScore),
+      technical_knowledge_score: clamp(analysis.metrics?.technical_knowledge) || Math.round(hybridScore * 0.8),
+      problem_solving_score: clamp(analysis.metrics?.problem_solving) || Math.round(hybridScore * 0.7),
+      communication_score: clamp(analysis.metrics?.communication) || Math.round(hybridScore * 0.9),
+      soft_skills_score: clamp(analysis.metrics?.soft_skills) || Math.round(hybridScore * 0.6),
+      cultural_fit_score: clamp(analysis.metrics?.cultural_fit) || Math.round(hybridScore * 0.5),
 
       confidence_level: toValidConfidence(analysis.speaking_patterns?.confidence_level),
       pace: toValidPace(analysis.speaking_patterns?.pace),
@@ -726,12 +741,12 @@ exports.analyzeInterview = async (req, res) => {
       growth_trajectory: toValidGrowth(analysis.growth_trajectory),
       // AI may return float strings like "7.00" — coerce to integer
       time_to_productivity_months: Math.round(parseInt(analysis.performance_prediction?.time_to_productivity_months, 10) || 1),
-      retention_probability_percentage: parseFloat(analysis.performance_prediction?.retention_probability_percentage) || 80,
+      retention_probability_percentage: clamp(analysis.performance_prediction?.retention_probability_percentage) || 80,
 
       hire_recommendation: toValidHireRec(analysis.recommendation),
       next_round_ready: !!analysis.overall_assessment?.next_round_readiness,
       detailed_evaluation: JSON.stringify(analysis),
-      ai_model_used: 'gemini-2.0-flash-hybrid'
+      ai_model_used: analysis.model_used || 'gemini-2.5-flash'
     };
 
     let interviewAnalysis = await InterviewAnalysis.findOne({ where: { application_id: applicationId } });
@@ -982,7 +997,7 @@ exports.makeFinalAIDecision = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Error making final decision',
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
       details: error.errors ? error.errors.map(e => e.message) : null,
       code: 'DECISION_ERROR'
     });
@@ -1046,8 +1061,14 @@ exports.getAIAnalysis = async (req, res) => {
     if (allQIds.size > 0) {
       const ids = Array.from(allQIds);
 
+      const { Op } = require('sequelize');
+      const numericIds = ids.filter(id => !isNaN(parseInt(id))).map(id => parseInt(id));
+
       // 1. Technical Bank
-      const techQs = await TechnicalQuestionBank.findAll({ attributes: ['questionId', 'question', 'correct_answer', 'expected_answer'] });
+      const techQs = await TechnicalQuestionBank.findAll({
+        where: { questionId: { [Op.in]: ids } },
+        attributes: ['questionId', 'question', 'correct_answer', 'expected_answer'] 
+      });
       techQs.forEach(q => {
         if (q.questionId) {
           questionMap[q.questionId.trim()] = { text: q.question, correct: q.correct_answer || q.expected_answer };
@@ -1056,11 +1077,19 @@ exports.getAIAnalysis = async (req, res) => {
       });
 
       // 2. MCQ Bank
-      const mcqQs = await MCQQuestion.findAll({ attributes: ['id', 'question', 'correct_option'] });
-      mcqQs.forEach(q => { questionMap[String(q.id)] = { text: q.question, correct: q.correct_option }; });
+      if (numericIds.length > 0) {
+        const mcqQs = await MCQQuestion.findAll({ 
+          where: { id: { [Op.in]: numericIds } },
+          attributes: ['id', 'question', 'correct_option'] 
+        });
+        mcqQs.forEach(q => { questionMap[String(q.id)] = { text: q.question, correct: q.correct_option }; });
+      }
 
       // 3. Interview Bank
-      const intQs = await InterviewQuestionBank.findAll({ attributes: ['questionId', 'question', 'expectedAnswer'] });
+      const intQs = await InterviewQuestionBank.findAll({ 
+        where: { questionId: { [Op.in]: ids } },
+        attributes: ['questionId', 'question', 'expectedAnswer'] 
+      });
       intQs.forEach(q => {
         if (q.questionId) {
           questionMap[q.questionId.trim()] = { text: q.question, correct: q.expectedAnswer };
@@ -1180,7 +1209,7 @@ exports.getAIAnalysis = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Error retrieving AI analysis',
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
       code: 'FETCH_ERROR'
     });
   }
@@ -1201,7 +1230,7 @@ exports.healthCheck = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'AI Service health check failed',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message
     });
   }
 };
@@ -1422,7 +1451,7 @@ exports.getAIAnalytics = async (req, res) => {
     });
   } catch (error) {
     logger.error('Analytics Fetch Error:', error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 
@@ -1569,7 +1598,7 @@ exports.chatWithAI = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'AI Chat is currently unavailable',
-      error: error.message
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message
     });
   }
 };

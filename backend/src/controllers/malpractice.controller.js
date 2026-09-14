@@ -5,8 +5,8 @@ exports.logEvent = async (req, res) => {
     const { application_id, type, meta } = req.body;
 
     const application = await Application.findByPk(application_id);
-    if (!application) {
-      return res.status(404).json({ message: "Application not found" });
+    if (!application || (req.user?.role === 'CANDIDATE' && req.candidate && application.candidate_id !== req.candidate.id)) {
+      return res.status(404).json({ message: "Application not found or unauthorized" });
     }
 
     // Severity logic (backend decides)

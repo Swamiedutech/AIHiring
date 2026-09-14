@@ -63,7 +63,7 @@ const createAIConfig = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error creating AI configuration",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -108,8 +108,22 @@ const updateAIConfig = async (req, res) => {
       }
     }
 
+    const allowedConfigFields = {
+      resumeWeight: req.body.resumeWeight,
+      mcqWeight: req.body.mcqWeight,
+      technicalWeight: req.body.technicalWeight,
+      interviewWeight: req.body.interviewWeight,
+      passingThreshold: req.body.passingThreshold,
+      integrityPenalty: req.body.integrityPenalty,
+      confidenceWeighting: req.body.confidenceWeighting,
+      prosConsRules: req.body.prosConsRules,
+      riskyWordings: req.body.riskyWordings,
+      autoEscalateThreshold: req.body.autoEscalateThreshold,
+      status: req.body.status
+    };
+
     const oldValue = { ...config.dataValues };
-    await config.update(req.body);
+    await config.update(allowedConfigFields);
 
     await auditLogger.logConfigChange(req, {
       entityType: "AIConfig",
@@ -128,7 +142,7 @@ const updateAIConfig = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error updating AI configuration",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -155,7 +169,7 @@ const getAIConfig = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching AI configuration",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -174,7 +188,7 @@ const getAllAIConfigs = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching AI configurations",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -252,7 +266,7 @@ const testAIConfig = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error testing AI configuration",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };

@@ -5,7 +5,7 @@ exports.getTemplates = async (req, res) => {
     const templates = await OfferTemplate.findAll({ order: [["createdAt", "DESC"]] });
     res.json({ success: true, templates });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 
@@ -19,7 +19,7 @@ exports.createTemplate = async (req, res) => {
     });
     res.json({ success: true, template });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };
 
@@ -36,6 +36,6 @@ exports.updateTemplate = async (req, res) => {
 
     res.json({ success: true, template });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };

@@ -103,7 +103,7 @@ exports.createOffer = async (req, res) => {
 
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? "Internal server error" : err.message });
   }
 };
 
@@ -124,7 +124,7 @@ exports.respondOffer = async (req, res) => {
       { 
         model: Application, 
         as: "application",
-        include: [{ model: Candidate, include: [User] }, Job]
+        include: [{ model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }, Job]
       }
     ];
 
@@ -135,23 +135,6 @@ exports.respondOffer = async (req, res) => {
         where: { application_id }, 
         include: includeSpec 
       });
-    }
-
-    if (!offer && application_id) {
-      // Fallback: If offer record is missing but application is in an offer-ready state, create it
-      const application = await Application.findByPk(application_id, { include: [{ model: Candidate, include: [User] }, Job] });
-      if (application && ["SELECTED", "OFFER_SENT", "OFFERED"].includes(application.status)) {
-        console.log("🛠️ Auto-creating missing offer record for application:", application_id);
-        offer = await Offer.create({
-          application_id: application.id,
-          salary: 0, 
-          joining_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          position_title: application.Job?.title || "Position",
-          status: "PENDING"
-        });
-        // Re-fetch with associations
-        offer = await Offer.findByPk(offer.id, { include: includeSpec });
-      }
     }
 
     if (!offer) {
@@ -168,14 +151,25 @@ exports.respondOffer = async (req, res) => {
       return res.status(400).json({ message: "Invalid decision" });
     }
 
-    if (offer.status !== "PENDING") {
-      return res.status(400).json({ message: "Offer has already been responded to" });
+    const [updatedRows] = await Offer.update(
+      {
+        status: decision,
+        candidate_notes: candidate_notes,
+        responded_at: new Date()
+      },
+      {
+        where: {
+          id: offer.id,
+          status: "PENDING"
+        }
+      }
+    );
+
+    if (updatedRows === 0) {
+      return res.status(400).json({ message: "Offer has already been responded to or is no longer pending." });
     }
 
-    offer.status = decision;
-    offer.candidate_notes = candidate_notes;
-    offer.responded_at = new Date();
-    await offer.save();
+    offer.status = decision; // For subsequent code
 
     if (offer.application) {
       offer.application.status = decision === "ACCEPTED" ? "HIRED" : "OFFER_REJECTED";
@@ -214,7 +208,7 @@ exports.respondOffer = async (req, res) => {
     res.json({ message: `Offer ${decision.toLowerCase()} successfully`, offer });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? "Internal server error" : err.message });
   }
 };
 
@@ -239,7 +233,7 @@ exports.getOfferDetails = async (req, res) => {
     
     res.json({ offer });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? "Internal server error" : err.message });
   }
 };
 
@@ -254,7 +248,7 @@ exports.getDispatchedOffers = async (req, res) => {
           model: Application,
           as: 'application',
           include: [
-            { model: Candidate, include: [User] },
+            { model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] },
             Job
           ]
         }
@@ -263,6 +257,6 @@ exports.getDispatchedOffers = async (req, res) => {
     });
     res.json({ success: true, data: offers });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: process.env.NODE_ENV === "production" ? "Internal server error" : err.message });
   }
 };

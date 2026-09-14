@@ -24,5 +24,9 @@ ENV NODE_ENV=production
 ENV PORT=5000
 ENV BACKEND_URL=http://localhost:5000
 
+# Switch to non-root user
+RUN chown -R node:node /app
+USER node
+
 # Start the application
 CMD ["node", "src/server.js"]

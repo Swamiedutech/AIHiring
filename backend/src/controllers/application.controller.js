@@ -113,11 +113,11 @@ exports.applyJob = async (req, res) => {
 
     try {
       await NotificationQueue.create({
-        user_id: candidate.user_id,
-        notification_type: "APPLICATION_SUBMITTED",
+        candidate_id: candidate.id,
+        notification_type: "APPLICATION_RECEIVED",
         title: "Application Submitted",
         message: `You have successfully applied for ${job.title}`,
-      });
+      }, { transaction: t });
     } catch (err) {
       console.error("Notification failed:", err.message);
     }
@@ -190,7 +190,7 @@ exports.applyJob = async (req, res) => {
       success: false,
       message: "Failed to submit application",
       // FIX #10: never leak internal error details in production
-      ...(isDev && { error: error.message })
+      ...(isDev && { error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })
     });
   }
 };
@@ -265,7 +265,7 @@ exports.getMyApplications = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch applications",
-      ...(isDev && { error: error.message })  // FIX #10
+      ...(isDev && { error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })  // FIX #10
     });
   }
 };
@@ -339,7 +339,7 @@ exports.getApplicationDetails = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch application details",
-      ...(isDev && { error: error.message })  // FIX #10
+      ...(isDev && { error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message })  // FIX #10
     });
   }
 };
@@ -441,7 +441,7 @@ exports.checkAndTriggerAutoRejection = async (applicationId, logger = console) =
       try {
         const { NotificationQueue, Candidate, User, Job } = require("../models");
         const appWithUser = await Application.findByPk(applicationId, {
-          include: [{ model: Candidate, include: [User] }, { model: Job }]
+          include: [{ model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }, { model: Job }]
         });
 
         if (appWithUser && appWithUser.Candidate) {

@@ -52,7 +52,7 @@ exports.startAssessment = async (req, res) => {
       transaction 
     });
 
-    if (attempt && (attempt.status === 'SUBMITTED' || attempt.status === 'EVALUATED')) {
+    if (attempt && attempt.status !== 'IN_PROGRESS') {
       await transaction.rollback();
       return res.status(400).json({ error: 'Assessment already completed and cannot be restarted' });
     }
@@ -142,7 +142,7 @@ exports.startAssessment = async (req, res) => {
         where: {
           isActive: true,
           section_type: 'SECTION_2',
-          [Op.notIn]: theoryPool.map(q => q.questionId)
+          questionId: { [Op.notIn]: theoryPool.map(q => q.questionId) }
         },
         order: sequelize.random(),
         limit: ASSESSMENT_CONFIG.SECTION2_THEORY_COUNT,
@@ -228,8 +228,10 @@ exports.saveAnswer = async (req, res) => {
     const { attemptId } = req.params;
     const { question_id, answer_text, section } = req.body;
 
-    const attempt = await AssessmentAttempt.findByPk(attemptId);
-    if (!attempt || attempt.status !== 'IN_PROGRESS') return res.status(400).json({ message: "Invalid attempt" });
+    const attempt = await AssessmentAttempt.findByPk(attemptId, { include: [{ model: Application }] });
+    if (!attempt || attempt.status !== 'IN_PROGRESS' || attempt.Application.candidate_id !== req.candidate.id) {
+      return res.status(404).json({ message: "Invalid or unauthorized attempt" });
+    }
 
     // Enforce Timer
     const timeLimitMinutes = attempt.metadata?.config?.TOTAL_DURATION_MINUTES || ASSESSMENT_CONFIG.TOTAL_DURATION_MINUTES;
@@ -261,32 +263,47 @@ exports.saveAllAnswers = async (req, res) => {
       return res.status(400).json({ error: 'answers object required' });
     }
 
-    const attempt = await AssessmentAttempt.findByPk(attemptId);
-    if (!attempt || attempt.status !== 'IN_PROGRESS') return res.status(400).json({ message: "Invalid attempt" });
+    const transaction = await sequelize.transaction();
+    try {
+      const attempt = await AssessmentAttempt.findByPk(attemptId, { 
+        include: [{ model: Application }],
+        lock: transaction.LOCK.UPDATE,
+        transaction
+      });
+      if (!attempt || attempt.status !== 'IN_PROGRESS' || attempt.Application.candidate_id !== req.candidate.id) {
+        await transaction.rollback();
+        return res.status(404).json({ message: "Invalid or unauthorized attempt" });
+      }
 
-    // Enforce Timer
-    const timeLimitMinutes = attempt.metadata?.config?.TOTAL_DURATION_MINUTES || ASSESSMENT_CONFIG.TOTAL_DURATION_MINUTES;
-    const timeLimitMs = (timeLimitMinutes + 2) * 60 * 1000; // 2 minutes grace period
-    const timeTakenMs = new Date() - new Date(attempt.started_at);
-    if (timeTakenMs > timeLimitMs) {
-      await attempt.update({ status: 'SUBMITTED', submitted_at: new Date() });
-      return res.status(400).json({ error: 'Assessment time limit exceeded. Exam auto-submitted.' });
+      // Enforce Timer
+      const timeLimitMinutes = attempt.metadata?.config?.TOTAL_DURATION_MINUTES || ASSESSMENT_CONFIG.TOTAL_DURATION_MINUTES;
+      const timeLimitMs = (timeLimitMinutes + 2) * 60 * 1000; // 2 minutes grace period
+      const timeTakenMs = new Date() - new Date(attempt.started_at);
+      if (timeTakenMs > timeLimitMs) {
+        await attempt.update({ status: 'SUBMITTED', submitted_at: new Date() }, { transaction });
+        await transaction.commit();
+        return res.status(400).json({ error: 'Assessment time limit exceeded. Exam auto-submitted.' });
+      }
+
+      // Merge with existing answers (don't overwrite answers from other section)
+      const existing = attempt.answers || {};
+      const merged = { ...existing };
+      Object.keys(answers).forEach(qId => {
+        merged[qId] = {
+          answer_text: answers[qId]?.answer_text || answers[qId] || '',
+          section: answers[qId]?.section || 1,
+          timestamp: new Date()
+        };
+      });
+
+      await attempt.update({ answers: merged, updated_at: new Date() }, { transaction });
+      await transaction.commit();
+      logger.info(`[BulkSave] Saved ${Object.keys(answers).length} answers for attempt ${attemptId}`);
+      res.json({ success: true, saved: Object.keys(merged).length });
+    } catch (txError) {
+      if (transaction) await transaction.rollback();
+      throw txError;
     }
-
-    // Merge with existing answers (don't overwrite answers from other section)
-    const existing = attempt.answers || {};
-    const merged = { ...existing };
-    Object.keys(answers).forEach(qId => {
-      merged[qId] = {
-        answer_text: answers[qId]?.answer_text || answers[qId] || '',
-        section: answers[qId]?.section || 1,
-        timestamp: new Date()
-      };
-    });
-
-    await AssessmentAttempt.update({ answers: merged, updated_at: new Date() }, { where: { id: attemptId } });
-    logger.info(`[BulkSave] Saved ${Object.keys(answers).length} answers for attempt ${attemptId}`);
-    res.json({ success: true, saved: Object.keys(merged).length });
   } catch (error) {
     logger.error('Bulk save error:', error);
     res.status(500).json({ error: 'Failed to save answers' });
@@ -300,43 +317,44 @@ exports.submitAssessment = async (req, res) => {
     const candidateId = req.candidate.id;
 
     const attempt = await AssessmentAttempt.findByPk(attemptId, { include: [{ model: Application }] });
-    if (!attempt || attempt.status !== 'IN_PROGRESS') {
-      return res.status(400).json({ error: 'Invalid attempt' });
+    if (!attempt || attempt.status !== 'IN_PROGRESS' || attempt.Application.candidate_id !== candidateId) {
+      return res.status(404).json({ error: 'Invalid or unauthorized attempt' });
     }
 
     // Enforce Timer on Submit
     const timeLimitMinutes = attempt.metadata?.config?.TOTAL_DURATION_MINUTES || ASSESSMENT_CONFIG.TOTAL_DURATION_MINUTES;
     const timeLimitMs = (timeLimitMinutes + 2) * 60 * 1000;
     const timeTakenMs = new Date() - new Date(attempt.started_at);
+    
+    // We update the submitted_at time. Even if they are late, we process the submission 
+    // but the saveAnswer route will have rejected any late answers.
     if (timeTakenMs > timeLimitMs) {
-      // Allow it to submit, but log it or reject. Since it's a submit action, we should just let it submit.
       logger.warn(`Attempt ${attemptId} submitted late (${timeTakenMs}ms). Time limit was ${timeLimitMs}ms.`);
     }
 
-    await attempt.update({ status: 'SUBMITTED', submitted_at: new Date() });
+    const transaction = await sequelize.transaction();
+    try {
+      await attempt.update({ status: 'SUBMITTED', submitted_at: new Date() }, { transaction });
 
-    const application = attempt.Application;
-    await application.update({ status: 'TECHNICAL_ROUND_COMPLETED' });
-    await ApplicationStatusLog.create({
-      application_id: application.id,
-      previous_status: 'TECHNICAL_ROUND_IN_PROGRESS',
-      new_status: 'TECHNICAL_ROUND_COMPLETED',
-      changed_by: candidateId,
-      reason: 'Candidate submitted assessment'
-    });
+      const application = attempt.Application;
+      await application.update({ status: 'TECHNICAL_ROUND_COMPLETED' }, { transaction });
+      await ApplicationStatusLog.create({
+        application_id: application.id,
+        previous_status: 'TECHNICAL_ROUND_IN_PROGRESS',
+        new_status: 'TECHNICAL_ROUND_COMPLETED',
+        changed_by: candidateId,
+        reason: 'Candidate submitted assessment'
+      }, { transaction });
+      
+      await transaction.commit();
+    } catch (txErr) {
+      await transaction.rollback();
+      throw txErr;
+    }
 
     res.json({ success: true, message: "Assessment submitted. AI analysis running in background." });
 
-    // Async auto-analysis
-    setImmediate(async () => {
-      try {
-        const mockReq = { params: { applicationId: application.id } };
-        const mockRes = { json: () => {}, status: () => mockRes };
-        await exports.analyzeAssessment(mockReq, mockRes);
-      } catch (err) {
-        logger.error(`[Auto-Analysis] Failed for app ${application.id}: ${err.message}`);
-      }
-    });
+    // Async auto-analysis moved to background worker (src/workers/assessment.worker.js)
 
   } catch (error) {
     logger.error('Submit error:', error);
@@ -413,37 +431,56 @@ exports.analyzeAssessment = async (req, res) => {
 
     const mcqScore = mcqWeight > 0 ? Math.round(mcqTotal / mcqWeight) : 0;
     const theoryScore = theoryWeight > 0 ? Math.round(theoryTotal / theoryWeight) : 0;
-    const finalScore = Math.round((mcqScore * ASSESSMENT_CONFIG.MCQ_WEIGHT) + (theoryScore * ASSESSMENT_CONFIG.THEORY_WEIGHT));
+    let finalScore = 0;
+    if (mcqWeight > 0 && theoryWeight > 0) {
+      finalScore = Math.round((mcqScore * ASSESSMENT_CONFIG.MCQ_WEIGHT) + (theoryScore * ASSESSMENT_CONFIG.THEORY_WEIGHT));
+    } else if (mcqWeight > 0 && theoryWeight === 0) {
+      finalScore = mcqScore; // Re-weight MCQ to 100%
+      logger.warn(`Role's question bank is incomplete: missing Theory questions for application ${applicationId}`);
+    } else if (theoryWeight > 0 && mcqWeight === 0) {
+      finalScore = theoryScore; // Re-weight Theory to 100%
+      logger.warn(`Role's question bank is incomplete: missing MCQ questions for application ${applicationId}`);
+    }
 
     const structureAvg = theoryCount > 0 ? avgStructure / theoryCount : 0;
     const coverageAvg = theoryCount > 0 ? avgCoverage / theoryCount : 0;
 
-    await attempt.update({
-      ai_score: theoryScore,
-      ml_score: mcqScore,
-      final_score: finalScore,
-      score: finalScore,
-      status: 'EVALUATED',
-      structure_score: structureAvg,
-      concept_coverage: coverageAvg,
-      ai_feedback: `MCQ Section: ${mcqScore}% | Theory Section: ${theoryScore}% | Final: ${finalScore}%`
-    });
 
     const application = attempt.Application;
-    await application.update({ technical_score: finalScore });
+    const tx = await sequelize.transaction();
+    try {
+      await attempt.update({
+        answers: storedAnswers,
+        ai_score: theoryScore,
+        ml_score: mcqScore,
+        final_score: finalScore,
+        score: finalScore,
+        status: 'EVALUATED',
+        structure_score: structureAvg,
+        concept_coverage: coverageAvg,
+        ai_feedback: `MCQ Section: ${mcqScore}% | Theory Section: ${theoryScore}% | Final: ${finalScore}%`
+      }, { transaction: tx });
 
-    await AssessmentAnalysis.destroy({ where: { application_id: application.id } });
-    await AssessmentAnalysis.create({
-      application_id: application.id,
-      overall_score: finalScore,
-      correctness_score: mcqScore,
-      assessment_type: 'TECHNICAL',
-      test_name: `${application.Job?.title || 'Role'} — Technical Assessment`,
-      strengths: Array.from(new Set([...allStrengths, `MCQ Score: ${mcqScore}%`, `Theory Score: ${theoryScore}%`])).slice(0, 6),
-      weaknesses: Array.from(new Set(allWeaknesses)).slice(0, 6),
-      detailed_feedback: `**Assessment Complete**\n\nSection 1 (MCQ): ${mcqScore}%\nSection 2 (Theory): ${theoryScore}%\nWeighted Final Score: ${finalScore}%\n\nMCQ evaluates core technical knowledge. Theory questions evaluate applied thinking and role-specific problem solving.`,
-      estimated_skill_level: finalScore >= 75 ? 'ADVANCED' : finalScore >= 50 ? 'INTERMEDIATE' : 'BEGINNER'
-    });
+      await application.update({ technical_score: finalScore }, { transaction: tx });
+
+      await AssessmentAnalysis.destroy({ where: { application_id: application.id }, transaction: tx });
+      await AssessmentAnalysis.create({
+        application_id: application.id,
+        overall_score: finalScore,
+        correctness_score: mcqScore,
+        assessment_type: 'TECHNICAL',
+        test_name: `${application.Job?.title || 'Role'} — Technical Assessment`,
+        strengths: Array.from(new Set([...allStrengths, `MCQ Score: ${mcqScore}%`, `Theory Score: ${theoryScore}%`])).slice(0, 6),
+        weaknesses: Array.from(new Set(allWeaknesses)).slice(0, 6),
+        detailed_feedback: `**Assessment Complete**\n\nSection 1 (MCQ): ${mcqScore}%\nSection 2 (Theory): ${theoryScore}%\nWeighted Final Score: ${finalScore}%\n\nMCQ evaluates core technical knowledge. Theory questions evaluate applied thinking and role-specific problem solving.`,
+        estimated_skill_level: finalScore >= 75 ? 'ADVANCED' : finalScore >= 50 ? 'INTERMEDIATE' : 'BEGINNER'
+      }, { transaction: tx });
+
+      await tx.commit();
+    } catch (txErr) {
+      await tx.rollback();
+      throw txErr;
+    }
 
     if (res?.json) res.json({ success: true, score: finalScore, mcq_score: mcqScore, theory_score: theoryScore });
 
@@ -463,7 +500,8 @@ exports.logMalpractice = async (req, res) => {
     if (!attempt || attempt.status !== 'IN_PROGRESS') return res.status(400).json({ error: 'Invalid' });
 
     const penaltyMap = { TAB_SWITCH: 5, FULLSCREEN_EXIT: 10, COPY_ATTEMPT: 3, WINDOW_BLUR: 2 };
-    const penalty = penaltyMap[type] || severity || 0;
+    // Ignore the request body's severity to prevent candidates from passing negative numbers or reducing penalty
+    const penalty = penaltyMap[type] || 2; 
 
     await attempt.update({
       malpractice_score: (attempt.malpractice_score || 0) + penalty,
@@ -482,8 +520,10 @@ exports.getAssessmentConfig = async (req, res) => res.json(ASSESSMENT_CONFIG);
 exports.getAssessmentStatus = async (req, res) => {
   try {
     const { attemptId } = req.params;
-    const attempt = await AssessmentAttempt.findByPk(attemptId);
-    if (!attempt) return res.status(404).json({ error: 'Not found' });
+    const attempt = await AssessmentAttempt.findByPk(attemptId, { include: [{ model: Application }] });
+    if (!attempt || attempt.Application.candidate_id !== req.candidate.id) {
+      return res.status(404).json({ error: 'Not found or unauthorized' });
+    }
     res.json({ status: attempt.status, started_at: attempt.started_at });
   } catch (_) {
     res.status(500).json({ error: 'Failed' });

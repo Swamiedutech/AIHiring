@@ -6,7 +6,8 @@
     "scripts": {
         "dev": "nodemon src/server.js",
         "start": "node src/server.js",
-        "test": "jest --runInBand --detectOpenHandles"
+        "test": "jest --runInBand --detectOpenHandles",
+        "db:migrate": "npx sequelize-cli db:migrate"
     },
     "keywords": [],
     "author": "",
@@ -15,7 +16,6 @@
         "@google/generative-ai": "^0.24.1",
         "@supabase/ssr": "^0.10.2",
         "@supabase/supabase-js": "^2.103.3",
-        "aws-sdk": "^2.1693.0",
         "axios": "^1.13.2",
         "bcryptjs": "^3.0.3",
         "cookie-parser": "^1.4.7",
@@ -24,7 +24,6 @@
         "express": "^5.2.1",
         "express-rate-limit": "^8.3.2",
         "form-data": "^4.0.5",
-        "fs": "^0.0.1-security",
         "helmet": "^8.1.0",
         "jsonwebtoken": "^9.0.3",
         "mathjs": "^15.2.0",
@@ -36,9 +35,9 @@
         "pdfkit": "^0.17.2",
         "pg": "^8.11.3",
         "sequelize": "^6.37.7",
-        "sqlite3": "^5.1.7",
         "string-similarity": "^4.0.4",
         "uuid": "^13.0.0",
+        "winston": "^3.19.0",
         "zod": "^4.3.6"
     },
     "devDependencies": {

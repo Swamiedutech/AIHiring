@@ -1,4 +1,5 @@
 const { sequelize } = require("../config/db");
+const { DataTypes } = require("sequelize");
 
 // ===================== CORE MODELS (as factory functions) =====================
 const userModel = require("./user");
@@ -218,6 +219,37 @@ TechnicalQuestionBank.belongsTo(Job, { foreignKey: "job_id" });
 Job.hasMany(InterviewQuestionBank, { foreignKey: "job_id" });
 InterviewQuestionBank.belongsTo(Job, { foreignKey: "job_id" });
 
+// ===================== NEW MISSING MODELS =====================
+const documentModel = require("./document");
+const hrAuditLogModel = require("./hrAuditLog");
+const hrInternalNoteModel = require("./hrInternalNote");
+const evaluationProsConsModel = require("./evaluationProsCons");
+const Session = require("./session");
+
+const Document = documentModel(sequelize, DataTypes);
+const HRAuditLog = hrAuditLogModel(sequelize, DataTypes);
+const HRInternalNote = hrInternalNoteModel(sequelize, DataTypes);
+const EvaluationProsCons = evaluationProsConsModel(sequelize, DataTypes);
+
+// Missing Associations
+Application.hasMany(HRAuditLog, { foreignKey: 'applicationId' });
+HRAuditLog.belongsTo(Application, { foreignKey: 'applicationId' });
+User.hasMany(HRAuditLog, { foreignKey: 'hrUserId' });
+HRAuditLog.belongsTo(User, { foreignKey: 'hrUserId' });
+
+Application.hasMany(HRInternalNote, { foreignKey: 'applicationId' });
+HRInternalNote.belongsTo(Application, { foreignKey: 'applicationId' });
+User.hasMany(HRInternalNote, { foreignKey: 'hrUserId' });
+HRInternalNote.belongsTo(User, { foreignKey: 'hrUserId' });
+
+Application.hasMany(EvaluationProsCons, { foreignKey: 'applicationId' });
+EvaluationProsCons.belongsTo(Application, { foreignKey: 'applicationId' });
+
+Application.hasMany(Document, { foreignKey: 'applicationId' });
+Document.belongsTo(Application, { foreignKey: 'applicationId' });
+User.hasMany(Document, { foreignKey: 'candidateId' });
+Document.belongsTo(User, { foreignKey: 'candidateId' });
+
 // ===================== EXPORT =====================
 module.exports = {
   sequelize,
@@ -261,5 +293,11 @@ module.exports = {
   // Scoring & Governance Models
   ManualJobMapping,
   HRApprovalRule,
-  ApprovalRecord
+  ApprovalRecord,
+  // Missing Models
+  Document,
+  Session,
+  HRAuditLog,
+  HRInternalNote,
+  EvaluationProsCons
 };

@@ -12,7 +12,7 @@ const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialectOptions: {
     ssl: {
       require: true,
-      rejectUnauthorized: false // Required for Supabase standard SSL
+      rejectUnauthorized: process.env.NODE_ENV === 'production' // Ensure server identity is verified in prod
     },
     keepAlive: true // Help prevent ECONNRESET by keeping connection active
   },

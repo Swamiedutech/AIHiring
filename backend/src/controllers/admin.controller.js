@@ -222,6 +222,6 @@ exports.createApprovalRule = async (req, res) => {
     res.status(201).json({ success: true, data: rule });
   } catch (error) {
     console.error("createApprovalRule error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message });
   }
 };

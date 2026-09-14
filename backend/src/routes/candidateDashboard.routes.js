@@ -13,7 +13,6 @@ const roleMiddleware = require("../middleware/role.middleware");
 const { uploadResume } = require("../controllers/resume.controller");
 const upload = require("../middleware/upload.middleware");
 const { uploadProfileImage: uploadProfileImageController } = require("../controllers/profileImage.controller");
-const uploadProfileImage = require("../middleware/uploadProfileImage.middleware");
 
 const router = express.Router();
 
@@ -52,7 +51,7 @@ router.post("/resume/autofill", autofillFromResume);
 
 router.post(
   "/profile-image/upload",
-  uploadProfileImage.single("profile_image"),
+  upload.single("profile_image"),
   uploadProfileImageController
 );
 

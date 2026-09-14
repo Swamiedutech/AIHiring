@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { candidateApi } from "@/lib/api";
 import { Loader2 } from "lucide-react";
+import DOMPurify from 'isomorphic-dompurify';
 
 export default function PrintOfferPage() {
   const params = useParams();
@@ -74,7 +75,7 @@ export default function PrintOfferPage() {
       `}</style>
 
       <div className="offer-container">
-        <div dangerouslySetInnerHTML={{ __html: offer.offer_letter_content }} />
+        <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(offer.offer_letter_content) }} />
       </div>
       
       <div className="no-print fixed bottom-8 left-1/2 -translate-x-1/2 flex gap-4">

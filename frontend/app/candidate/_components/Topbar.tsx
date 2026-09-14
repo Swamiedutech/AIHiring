@@ -99,13 +99,7 @@ export default function CandidateTopbar({ title }: { title?: string }) {
                 >
                   <User className="w-3.5 h-3.5" /> My Profile
                 </Link>
-                <Link
-                  href="/candidate/settings"
-                  onClick={() => setUserOpen(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all text-[11px] font-bold uppercase tracking-wider"
-                >
-                  <Settings2 className="w-3.5 h-3.5" /> Account Settings
-                </Link>
+
               </div>
 
               {/* Logout Action */}

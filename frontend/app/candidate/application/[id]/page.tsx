@@ -3,7 +3,7 @@
 import React, { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { candidateApi, BACKEND_URL } from "@/lib/api";
+import { candidateApi, BACKEND_URL, getFileUrl } from "@/lib/api";
 import { useUIStore } from "@/lib/store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -196,7 +196,7 @@ export default function ApplicationDetailPage() {
                      ].map((doc, i) => (
                         <div
                            key={i}
-                           onClick={() => doc.url && window.open(`${BACKEND_URL}/${doc.url}`, "_blank")}
+                           onClick={() => doc.url && window.open(getFileUrl(doc.url), "_blank")}
                            className={cn(
                               "flex items-center justify-between p-6 rounded-lg border-2 transition-all group",
                               doc.active ? "bg-white border-slate-50 hover:border-blue-100 hover:shadow-sm cursor-pointer" : "bg-slate-50 border-slate-50 opacity-50 grayscale cursor-not-allowed"

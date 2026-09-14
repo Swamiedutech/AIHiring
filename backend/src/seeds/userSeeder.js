@@ -9,8 +9,19 @@ async function seedUsers() {
       return;
     }
 
+    if (process.env.NODE_ENV === "production") {
+      console.log("❌ Seeding users is disabled in production.");
+      return;
+    }
+
+    const crypto = require("crypto");
+    const generatedPassword = crypto.randomBytes(8).toString("hex") + "A1!";
+    console.log(`\n========================================`);
+    console.log(`🔐 INITIAL ADMIN PASSWORD: ${generatedPassword}`);
+    console.log(`========================================\n`);
+
     const salt = await bcrypt.genSalt(10);
-    const password = await bcrypt.hash("password123", salt);
+    const password = await bcrypt.hash(generatedPassword, salt);
 
     const users = [
       {

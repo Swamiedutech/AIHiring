@@ -44,15 +44,21 @@ const getJobs = async (req, res) => {
         { model: InterviewQuestionBank }
       ]
     });
+    const appCounts = await Application.findAll({
+      attributes: ['job_id', [Application.sequelize.fn('COUNT', Application.sequelize.col('id')), 'count']],
+      group: ['job_id'],
+      raw: true
+    });
     
-    const withCounts = await Promise.all(
-      jobs.map(async (job) => {
-        const count = await Application.count({ where: { job_id: job.id } });
-        const n = normalize(job);
-        n.applicationCount = count;
-        return n;
-      })
-    );
+    const countMap = {};
+    appCounts.forEach(c => countMap[c.job_id] = parseInt(c.count, 10));
+
+    const withCounts = jobs.map(job => {
+      const n = normalize(job);
+      n.applicationCount = countMap[job.id] || 0;
+      return n;
+    });
+    
     res.json({ success: true, data: withCounts });
   } catch (error) {
     logger.error("getJobs error:", error);

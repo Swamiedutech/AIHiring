@@ -22,7 +22,6 @@ const path = require('path');
 const aiService = require('../services/ai.service');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const logger = require('../utils/logger');
-const manualScoringService = require('../services/manualScoring.service');
 
 // Job Role Mapping for Interview Questions
 const mapJobToInterviewRole = (jobTitle, department) => {
@@ -419,8 +418,6 @@ exports.submitResponsePhase5 = async (req, res) => {
       question_number
     } = payload;
 
-    const video_blob = req.file ? req.file.buffer : null;
-
     const interviewSession = await InterviewSession.findByPk(sessionId, {
       include: [{
         model: Application,
@@ -443,24 +440,32 @@ exports.submitResponsePhase5 = async (req, res) => {
     }
 
     let recordingPath = null;
-    if (video_blob) {
-      recordingPath = await saveRecording(
-        sessionId,
-        question_id,
-        video_blob,
-        'video'
-      );
+    if (req.file) {
+      // multer diskStorage already saved the file to disk
+      recordingPath = `/uploads/interviews/${req.file.filename}`;
     }
 
     const storedQuestions = [...(interviewSession.questions_asked || [])];
-    const currentStoredQ = storedQuestions.find(q => q.id === question_id) || {};
+    
+    // Enforce server-side tracking
+    const expectedIndex = storedQuestions.findIndex(q => !q.response_text && !q.answered_at);
+    if (expectedIndex === -1) {
+      return res.status(400).json({ error: 'All questions have already been answered.' });
+    }
+
+    const qIndex = storedQuestions.findIndex(q => String(q.id) === String(question_id));
+    if (qIndex === -1 || qIndex !== expectedIndex) {
+      return res.status(400).json({ error: 'Out of order question submission or invalid ID.' });
+    }
+
+    const currentStoredQ = storedQuestions[qIndex];
     const expectedAnswer = currentStoredQ.expectedAnswer || "";
 
     const analysis = await analyzeResponse(transcription || "", expectedAnswer);
 
     const questionResponse = {
       question_id,
-      question_number,
+      question_number: expectedIndex + 1, // Server-side tracked
       question_text: currentStoredQ.question || "Question",
       expectedAnswer,
       response_text: transcription || "",
@@ -471,79 +476,25 @@ exports.submitResponsePhase5 = async (req, res) => {
     };
 
     // Update the specific question with response
-    const qIndex = storedQuestions.findIndex(q => q.id === question_id);
-    if (qIndex !== -1) {
-      storedQuestions[qIndex] = {
-        ...storedQuestions[qIndex],
-        ...questionResponse
-      };
-    } else {
-      // Fallback if ID doesn't match, though it should
-      storedQuestions.push(questionResponse);
-    }
+    storedQuestions[qIndex] = {
+      ...storedQuestions[qIndex],
+      ...questionResponse
+    };
     
     const questionsAsked = storedQuestions;
     interviewSession.changed('questions_asked', true);
 
-    const isLastQuestion = question_number >= INTERVIEW_CONFIG.TOTAL_QUESTIONS;
+    const isLastQuestion = expectedIndex >= INTERVIEW_CONFIG.TOTAL_QUESTIONS - 1 || expectedIndex === storedQuestions.length - 1;
 
     if (isLastQuestion) {
       logger.info(`[Interview] Final question reached for session ${sessionId}. Finalizing...`);
       await interviewSession.update({
         questions_asked: questionsAsked,
-        status: 'COMPLETED', 
+        status: 'EVALUATION_PENDING', 
         submitted_at: new Date()
       });
 
-      let interviewScore = 0;
-      let aiAnalysis = null;
-      try {
-        logger.info(`[Interview AI] Running Gemini-2.0-flash analysis for session ${sessionId}`);
-        
-        const qaPairs = questionsAsked.map(q => ({
-          question: q.question_text,
-          answer: q.response_text,
-          duration: q.response_duration_seconds
-        }));
- 
-        aiAnalysis = await aiService.analyzeFullInterview(qaPairs, application.Job?.title);
-        interviewScore = aiAnalysis.overall_interview_score || 0;
-        
-      } catch (aiErr) {
-        logger.error(`[Interview AI] Error: ${aiErr.message}`);
-        interviewScore = 0; // Fallback
-      }
-
-      // Always update session and application, regardless of AI success
-      try {
-        await interviewSession.update({
-          questions_asked: questionsAsked,
-          status: 'COMPLETED',
-          submitted_at: new Date(),
-          overall_score: interviewScore,
-          dimension_scores: aiAnalysis?.dimension_scores || {},
-          highlights: aiAnalysis?.highlights || [],
-          hire_recommendation: aiAnalysis?.recommendation?.toUpperCase().replace(/\s+/g, '_') || 'MAYBE'
-        });
- 
-        await application.update({
-          status: 'INTERVIEW_COMPLETED',
-          interview_score: Math.round(interviewScore),
-          updated_at: new Date()
-        });
- 
-        logger.info(`[Interview AI] Score: ${interviewScore}, Analysis Persisted.`);
-      } catch (dbErr) {
-        logger.error(`[Interview DB] Error saving final interview state: ${dbErr.message}`);
-      }
- 
-      // Auto-rejection engine
-      try {
-        const { checkAndTriggerAutoRejection } = require('./application.controller');
-        await checkAndTriggerAutoRejection(applicationId, logger);
-      } catch (autoErr) {
-        logger.warn(`[Auto-Rejection] Post-interview check failed: ${autoErr.message}`);
-      }
+      logger.info(`[Interview] Session ${sessionId} submitted and queued for background evaluation.`);
  
       // Create notification
       try {
@@ -656,6 +607,7 @@ exports.getInterviewStatusByApplicationId = async (req, res) => {
     const interviewSession = await InterviewSession.findOne({
       where: {
         application_id: applicationId,
+        candidate_id: candidateId,
         status: { [Op.ne]: 'CANCELLED' }
       }
     });

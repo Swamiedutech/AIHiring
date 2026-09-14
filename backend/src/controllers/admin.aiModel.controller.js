@@ -37,7 +37,7 @@ const deployAIModel = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error deploying AI model",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -85,7 +85,7 @@ const activateAIModel = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error activating AI model",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -126,7 +126,7 @@ const rollbackAIModel = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error rolling back AI model",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -145,7 +145,7 @@ const getAIModels = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching AI models",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -184,7 +184,7 @@ const updateModelAccuracy = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error updating model accuracy",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };
@@ -210,7 +210,7 @@ const updateFrozenCandidates = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error updating frozen candidates",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };

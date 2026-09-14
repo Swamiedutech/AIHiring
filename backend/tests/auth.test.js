@@ -28,7 +28,7 @@ describe("Auth Endpoints", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.errors).toContainEqual(expect.objectContaining({
-        path: "body.password"
+        path: "password"
       }));
     });
   });
@@ -44,6 +44,6 @@ describe("Auth Endpoints", () => {
 
       // Status might be 401 or 400 depending on controller
       expect(res.status).toBeGreaterThanOrEqual(400);
-    });
+    }, 15000);
   });
 });

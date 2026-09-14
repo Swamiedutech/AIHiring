@@ -16,7 +16,7 @@ module.exports = (sequelize) => {
     allowNull: true
   },
   status: {
-    type: DataTypes.ENUM("SCHEDULED", "IN_PROGRESS", "SUBMITTED", "COMPLETED", "FAILED", "CANCELLED"),
+    type: DataTypes.ENUM("SCHEDULED", "IN_PROGRESS", "SUBMITTED", "COMPLETED", "FAILED", "CANCELLED", "EVALUATION_PENDING", "PROCESSING"),
     defaultValue: "SCHEDULED"
   },
   interview_type: {

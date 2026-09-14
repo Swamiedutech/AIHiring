@@ -33,7 +33,7 @@ exports.uploadProfileImage = async (req, res) => {
     console.error("Profile image upload error:", error);
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: process.env.NODE_ENV === "production" ? "Internal server error" : error.message,
     });
   }
 };

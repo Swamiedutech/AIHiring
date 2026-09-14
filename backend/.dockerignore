@@ -4,3 +4,6 @@ node_modules
 .gitignore
 scratch
 *.log
+uploads
+ai_service
+tests

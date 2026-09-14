@@ -36,7 +36,7 @@ class HRDecisionController {
       }
 
       const application = await Application.findByPk(applicationId, {
-        include: [{ model: Candidate, include: [{ model: User }] }]
+        include: [{ model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }]
       });
       if (!application) {
         return res.status(404).json({ success: false, message: 'Application not found' });
@@ -146,106 +146,103 @@ class HRDecisionController {
       }
       // --- QUORUM LOGIC END ---
 
-      application.status = newStatus;
-      application.hr_decision = decision;
-      application.hr_notes = `${reason}${comments ? ` | ${comments}` : ''}`;
+      const mainTx = await sequelize.transaction();
+      try {
+        application.status = newStatus;
+        application.hr_decision = decision;
+        application.hr_notes = `${reason}${comments ? ` | ${comments}` : ''}`;
 
-      if (decision === 'REQUEST_RE_INTERVIEW') {
-        application.interview_score = null;
-        const t = await sequelize.transaction();
-        try {
+        if (decision === 'REQUEST_RE_INTERVIEW') {
+          application.interview_score = null;
           // Archive rather than delete — mark with a note since is_archived column doesn't exist
           await InterviewAnalysis.update(
             { scoring_rationale: sequelize.literal(`COALESCE(scoring_rationale, '') || ' [SUPERSEDED]'`) },
-            { where: { application_id: applicationId }, transaction: t }
+            { where: { application_id: applicationId }, transaction: mainTx }
           );
-          await InterviewSession.update({ status: 'CANCELLED' }, { where: { application_id: applicationId }, transaction: t });
+          await InterviewSession.update({ status: 'CANCELLED' }, { where: { application_id: applicationId }, transaction: mainTx });
           
           await InterviewSession.create({
             application_id: applicationId,
             status: 'SCHEDULED',
             interview_type: 'VIDEO',
             scheduled_at: new Date()
-          }, { transaction: t });
-          await t.commit();
+          }, { transaction: mainTx });
           console.log(`[Re-Interview] Superseded interview data for application ${applicationId}`);
-        } catch (cleanErr) {
-          await t.rollback();
-          console.error('Cleanup error in re-interview request:', cleanErr.message);
         }
-      }
-      if (decision === 'REQUEST_RE_ASSESSMENT') {
-        application.technical_score = null;
-        const t = await sequelize.transaction();
-        try {
+        
+        if (decision === 'REQUEST_RE_ASSESSMENT') {
+          application.technical_score = null;
           const { AssessmentAnalysis, AssessmentAttempt } = require('../models');
           // Archive rather than delete
-          await AssessmentAnalysis.update({ test_name: sequelize.literal(`test_name || ' (ARCHIVED)'`) }, { where: { application_id: applicationId }, transaction: t });
+          await AssessmentAnalysis.update({ test_name: sequelize.literal(`test_name || ' (ARCHIVED)'`) }, { where: { application_id: applicationId }, transaction: mainTx });
           await AssessmentAttempt.update(
             { status: 'SUPERSEDED' },
-            { where: { application_id: applicationId }, transaction: t }
+            { where: { application_id: applicationId }, transaction: mainTx }
           );
-          await t.commit();
           console.log(`[Re-Assessment] Superseded Assessment data for application ${applicationId}`);
-        } catch (cleanErr) {
-          await t.rollback();
-          console.error('Assessment cleanup error:', cleanErr.message);
         }
+
+        // Handle Offer record creation for SEND_OFFER
+        if (decision === 'SEND_OFFER') {
+          const { OfferTemplate } = require('../models');
+          const latestTemplate = await OfferTemplate.findOne({ order: [['createdAt', 'DESC']] });
+
+          let templateContent = latestTemplate?.templateContent || `
+            <div style="font-family: 'Times New Roman', serif; line-height: 1.5; color: #000;">
+              <h2 style="text-align: center;">OFFER OF EMPLOYMENT</h2>
+              <p>Dear {{candidateName}},</p>
+              <p>We are pleased to offer you the position of <strong>{{jobTitle}}</strong> at AI Hiring System.</p>
+              <p><strong>Salary:</strong> {{salary}}</p>
+              <p><strong>Joining Date:</strong> {{joiningDate}}</p>
+              <p>We look forward to having you join our team.</p>
+              <p>Sincerely,<br/>HR Department</p>
+            </div>
+          `;
+
+          // Replace Placeholders
+          const candidateName = application.Candidate?.User?.name || 'Candidate';
+          const jobTitle = req.body.designation || application.Job?.title || 'Professional';
+          const salaryVal = `₹${(req.body.salary || 1000000).toLocaleString()}`;
+          const joiningDateVal = new Date(req.body.joining_date || Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB');
+
+          templateContent = templateContent
+            .replace(/{{candidateName}}/g, candidateName)
+            .replace(/{{jobTitle}}/g, jobTitle)
+            .replace(/{{salary}}/g, salaryVal)
+            .replace(/{{joiningDate}}/g, joiningDateVal);
+
+          // Archive rather than delete to fix Issue #2
+          await Offer.update({ status: 'SUPERSEDED' }, { where: { application_id: applicationId, status: 'PENDING' }, transaction: mainTx });
+
+          await Offer.create({
+            application_id: applicationId,
+            salary: req.body.salary || 1000000,
+            joining_date: req.body.joining_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            position_title: jobTitle,
+            status: "PENDING",
+            offer_letter_content: templateContent
+          }, { transaction: mainTx });
+        }
+
+        // Aggregate Score if moving to final
+        if (decision === 'APPROVED' || decision === 'REJECTED') {
+          const { MalpracticeEvent } = require('../models');
+          const malpracticeCount = await MalpracticeEvent.count({ where: { application_id: applicationId }, transaction: mainTx });
+          
+          application.overall_score = computeApplicationScore({
+            resumeScore: application.resume_score,
+            technicalScore: application.technical_score,
+            interviewScore: application.interview_score,
+            malpracticeWarnings: malpracticeCount
+          });
+        }
+
+        await application.save({ transaction: mainTx });
+        await mainTx.commit();
+      } catch (txErr) {
+        await mainTx.rollback();
+        throw txErr; // Bubble up to outer catch handler
       }
-
-      // Handle Offer record creation for SEND_OFFER
-      if (decision === 'SEND_OFFER') {
-        const { OfferTemplate } = require('../models');
-        const latestTemplate = await OfferTemplate.findOne({ order: [['createdAt', 'DESC']] });
-
-        let templateContent = latestTemplate?.templateContent || `
-          <div style="font-family: 'Times New Roman', serif; line-height: 1.5; color: #000;">
-            <h2 style="text-align: center;">OFFER OF EMPLOYMENT</h2>
-            <p>Dear {{candidateName}},</p>
-            <p>We are pleased to offer you the position of <strong>{{jobTitle}}</strong> at AI Hiring System.</p>
-            <p><strong>Salary:</strong> {{salary}}</p>
-            <p><strong>Joining Date:</strong> {{joiningDate}}</p>
-            <p>We look forward to having you join our team.</p>
-            <p>Sincerely,<br/>HR Department</p>
-          </div>
-        `;
-
-        // Replace Placeholders
-        const candidateName = application.Candidate?.User?.name || 'Candidate';
-        const jobTitle = req.body.designation || application.Job?.title || 'Professional';
-        const salaryVal = `₹${(req.body.salary || 1000000).toLocaleString()}`;
-        const joiningDateVal = new Date(req.body.joining_date || Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB');
-
-        templateContent = templateContent
-          .replace(/{{candidateName}}/g, candidateName)
-          .replace(/{{jobTitle}}/g, jobTitle)
-          .replace(/{{salary}}/g, salaryVal)
-          .replace(/{{joiningDate}}/g, joiningDateVal);
-
-        // Delete existing offers for this application to avoid duplicates
-        await Offer.destroy({ where: { application_id: applicationId } });
-
-        await Offer.create({
-          application_id: applicationId,
-          salary: req.body.salary || 1000000,
-          joining_date: req.body.joining_date || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          position_title: jobTitle,
-          status: "PENDING",
-          offer_letter_content: templateContent
-        });
-      }
-
-      // Aggregate Score if moving to final
-      if (decision === 'APPROVED' || decision === 'REJECTED') {
-        application.overall_score = computeApplicationScore({
-          resumeScore: application.resume_score,
-          technicalScore: application.technical_score,
-          interviewScore: application.interview_score,
-          malpracticeWarnings: application.malpractice_warnings || 0
-        });
-      }
-
-      await application.save();
 
       // Audit: HR decision
       await auditLogger.logHRDecision(req, {
@@ -339,7 +336,7 @@ class HRDecisionController {
       }
 
       const application = await Application.findByPk(applicationId, {
-        include: [{ model: Candidate, include: [{ model: User }] }]
+        include: [{ model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }]
       });
       if (!application) {
         return res.status(404).json({ success: false, message: 'Application not found' });
@@ -446,7 +443,7 @@ class HRDecisionController {
       }
 
       const application = await Application.findByPk(applicationId, {
-        include: [{ model: Candidate, include: [{ model: User }] }]
+        include: [{ model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }]
       });
       if (!application) return res.status(404).json({ success: false, message: 'Application not found' });
 
@@ -583,7 +580,7 @@ class HRDecisionController {
           { model: AssessmentAttempt, as: 'assessment_attempts', required: false },
           { model: InterviewSession, as: 'interview_sessions', required: false },
           { model: Job },
-          { model: Candidate, include: [{ model: User }] }
+          { model: Candidate, include: [{ model: User, attributes: { exclude: ['password', 'login_code'] } }] }
         ]
       });
 
@@ -620,7 +617,7 @@ class HRDecisionController {
 
     } catch (err) {
       console.error("[Decision Core] Error:", err);
-      res.status(500).json({ error: err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined });
+      res.status(500).json({ error: process.env.NODE_ENV === "production" ? "Internal server error" : err.message, stack: process.env.NODE_ENV === 'development' ? err.stack : undefined });
     }
   }
 
@@ -646,7 +643,7 @@ class HRDecisionController {
         }
       });
     } catch (err) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: process.env.NODE_ENV === "production" ? "Internal server error" : err.message });
     }
   }
 }

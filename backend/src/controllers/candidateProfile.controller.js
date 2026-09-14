@@ -58,7 +58,7 @@ class CandidateProfileController {
           { model: TechnicalRound, required: false, attributes: ['id', 'score', 'status', 'ai_feedback'] },
           { model: Interview,      required: false, attributes: ['id', 'ai_score', 'ai_summary', 'hire_recommendation', 'status'] },
           { model: Offer,          as: "offer", required: false, attributes: ['id', 'salary', 'joining_date', 'status'] },
-          { model: ResumeAnalysis, required: false, attributes: ['id', 'strengths', 'weaknesses', 'why_to_hire', 'ai_model_used', 'overall_score', 'ai_summary', 'total_years_experience', 'jd_match_score', 'contact_info', 'education', 'skills'] },
+          { model: ResumeAnalysis, required: false, attributes: ['id', 'strengths', 'weaknesses', 'ai_model_used', 'overall_score', 'ai_summary', 'total_years_experience', 'jd_match_score', 'contact_info', 'education', 'skills'] },
 
           { model: AssessmentAnalysis, required: false, attributes: ['id', 'strengths', 'weaknesses', 'ai_model_used', 'overall_score', 'detailed_feedback', 'improvement_areas', 'estimated_skill_level', 'correctness_score', 'test_name'] },
           { 
@@ -336,7 +336,7 @@ class CandidateProfileController {
             }
           ),
 
-          whyToHire: application.ResumeAnalysis?.why_to_hire || null,
+          whyToHire: null, // Removed non-existent why_to_hire field
 
           technicalData: technical ? { id: technical.id, score: technical.score, status: technical.status, feedback: technical.ai_feedback } : null,
           interviewData: interview ? { score: interview.ai_score, summary: interview.ai_summary, recommendation: interview.hire_recommendation, status: interview.status } : null,

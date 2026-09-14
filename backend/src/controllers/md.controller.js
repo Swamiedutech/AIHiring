@@ -317,42 +317,49 @@ exports.getTopCandidates = async (req, res) => {
   }
 };
 
+const mdAnalyticsCache = {
+  data: null,
+  timestamp: 0,
+  TTL: 60000 // 1 minute cache
+};
+
 exports.getAnalytics = async (req, res) => {
   try {
-    const total = await Application.count();
+    const now = Date.now();
+    if (mdAnalyticsCache.data && now - mdAnalyticsCache.timestamp < mdAnalyticsCache.TTL) {
+      return res.json(mdAnalyticsCache.data);
+    }
 
-    // Align with global status enums
-    const selected = await Application.count({
-      where: { 
-        status: { 
-          [Op.in]: ['SELECTED', 'HIRED'] 
-        } 
-      }
+    const { Job } = require('../models');
+
+    // 1. Status Counts
+    const statusCounts = await Application.findAll({
+      attributes: ['status', [Application.sequelize.fn('COUNT', Application.sequelize.col('id')), 'count']],
+      group: ['status'],
+      raw: true
+    });
+    
+    let total = 0;
+    const countMap = {};
+    statusCounts.forEach(c => {
+      const cnt = parseInt(c.count, 10);
+      countMap[c.status] = cnt;
+      total += cnt;
     });
 
-    const rejected = await Application.count({
-      where: { 
-        status: { 
-          [Op.in]: ['REJECTED'] 
-        } 
-      }
-    });
+    const selected = (countMap['SELECTED'] || 0) + (countMap['HIRED'] || 0);
+    const rejected = countMap['REJECTED'] || 0;
+    const pendingReview = (countMap['INTERVIEW_COMPLETED'] || 0) + (countMap['RECOMMENDED_BY_AI'] || 0) + (countMap['HR_REVIEW'] || 0);
+    
+    let totalApplications = 0;
+    MD_VISIBLE_STATUSES.forEach(s => { totalApplications += (countMap[s] || 0); });
 
-    // Analytics based on overall score
+    // 2. Score Analytics
     const high = await Application.count({ where: { overall_score: { [Op.gte]: 80 } } });
     const medium = await Application.count({ where: { overall_score: { [Op.between]: [50, 79] } } });
     const low = await Application.count({ where: { overall_score: { [Op.lt]: 50 } } });
 
     const scoreDistribution = { high, medium, low };
-
-    // Pipeline count for MD (post-interview only)
-    const pendingReview = await Application.count({
-      where: { status: { [Op.in]: ['INTERVIEW_COMPLETED', 'RECOMMENDED_BY_AI', 'HR_REVIEW'] } }
-    });
-
-    const totalApplications = await Application.count({
-      where: { status: { [Op.in]: MD_VISIBLE_STATUSES } }
-    });
 
     const avgScore = await Application.findOne({
       where: { status: { [Op.in]: MD_VISIBLE_STATUSES } },
@@ -362,8 +369,10 @@ exports.getAnalytics = async (req, res) => {
 
     // Funnel Data
     const applied = total;
-    const screened = await Application.count({ where: { status: { [Op.notIn]: ['APPLIED', 'REJECTED'] } } });
-    const assessment = await Application.count({ where: { status: { [Op.in]: ['TECHNICAL_ROUND_COMPLETED', 'INTERVIEW_SCHEDULED', 'INTERVIEW_IN_PROGRESS', 'INTERVIEW_COMPLETED', 'RECOMMENDED_BY_AI', 'PROCEED_TO_HR', 'HR_REVIEW', 'SELECTED', 'OFFER_SENT', 'HIRED'] } } });
+    const screened = total - (countMap['APPLIED'] || 0) - (countMap['REJECTED'] || 0);
+    const assessmentStatuses = ['TECHNICAL_ROUND_COMPLETED', 'INTERVIEW_SCHEDULED', 'INTERVIEW_IN_PROGRESS', 'INTERVIEW_COMPLETED', 'RECOMMENDED_BY_AI', 'PROCEED_TO_HR', 'HR_REVIEW', 'SELECTED', 'OFFER_SENT', 'HIRED'];
+    let assessment = 0;
+    assessmentStatuses.forEach(s => { assessment += (countMap[s] || 0); });
     const interview = pendingReview + selected + rejected; // Approximation for passed assessment
 
     const funnel = [
@@ -375,13 +384,9 @@ exports.getAnalytics = async (req, res) => {
     ];
 
     // Department Mix
-    const { Job } = require('../models');
     const deptApps = await Application.findAll({
       attributes: [],
-      include: [{
-        model: Job,
-        attributes: ['department']
-      }]
+      include: [{ model: Job, attributes: ['department'] }]
     });
 
     const deptCounts = {};
@@ -391,50 +396,63 @@ exports.getAnalytics = async (req, res) => {
     });
     
     const departments = Object.keys(deptCounts).map(name => ({
-      name,
-      value: deptCounts[name]
+      name, value: deptCounts[name]
     }));
 
     // Trend Data (Last 6 months)
     const trendData = [];
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+    sixMonthsAgo.setDate(1);
+    sixMonthsAgo.setHours(0,0,0,0);
+
+    const recentApps = await Application.findAll({
+      where: { created_at: { [Op.gte]: sixMonthsAgo } },
+      attributes: ['created_at', 'status'],
+      raw: true
+    });
+
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
-      const start = new Date(d.getFullYear(), d.getMonth(), 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const mStr = d.toLocaleString('default', { month: 'short' });
+      const mNum = d.getMonth();
+      const yNum = d.getFullYear();
 
-      const monthApps = await Application.count({
-        where: { created_at: { [Op.between]: [start, end] } }
-      });
-      const monthHires = await Application.count({
-        where: { 
-          created_at: { [Op.between]: [start, end] },
-          status: { [Op.in]: ['SELECTED', 'HIRED', 'OFFER_SENT'] }
+      let apps = 0;
+      let hires = 0;
+      
+      recentApps.forEach(app => {
+        const appDate = new Date(app.created_at);
+        if (appDate.getMonth() === mNum && appDate.getFullYear() === yNum) {
+          apps++;
+          if (['SELECTED', 'HIRED', 'OFFER_SENT'].includes(app.status)) {
+            hires++;
+          }
         }
       });
 
-      trendData.push({
-        month: d.toLocaleString('default', { month: 'short' }),
-        apps: monthApps,
-        hires: monthHires
-      });
+      trendData.push({ month: mStr, apps, hires });
     }
 
-    res.json({
+    const resultData = {
       total,
       totalApplications,
       selected,
       rejected,
       pendingReview,
       shortlisted: pendingReview + selected,
-      avgAiScore: avgScore?.avg || 0,
-      offerRate: total > 0 ? ((selected / total) * 100) : 0,
-      selectionRate: total > 0 ? ((selected / total) * 100).toFixed(1) : "0.0",
-      scoreDistribution,
+      avgAiScore: avgScore?.avg ? parseFloat(avgScore.avg).toFixed(1) : 0,
       funnel,
+      scoreDistribution,
       departments,
       trendData
-    });
+    };
+
+    mdAnalyticsCache.data = resultData;
+    mdAnalyticsCache.timestamp = now;
+
+    res.json(resultData);
 
   } catch (err) {
     console.error("MD Analytics Error:", err);
