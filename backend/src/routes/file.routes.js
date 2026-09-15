@@ -23,11 +23,16 @@ router.get(/.*/, async (req, res) => {
 
     // Securely resolve the file path and prevent directory traversal
     const requestedPath = req.path;
-    const safePath = path.normalize(requestedPath).replace(/^(\.\.(\/|\\|$))+/, '');
-    const absolutePath = path.resolve(__dirname, "../../uploads", safePath.replace(/^\//, ''));
+    // Remove leading slashes (both forward and backslash) to prevent path.resolve from treating it as an absolute path on Windows
+    const relativePath = requestedPath.replace(/^[\\\/]+/, '');
+    
+    // Normalize to prevent directory traversal
+    const safePath = path.normalize(relativePath).replace(/^(\.\.(\/|\\|$))+/, '');
+    const absolutePath = path.resolve(__dirname, "../../uploads", safePath);
 
     // Ensure the resolved path is still within the uploads directory
-    if (!absolutePath.startsWith(path.resolve(__dirname, "../../uploads"))) {
+    const uploadsDir = path.resolve(__dirname, "../../uploads");
+    if (!absolutePath.startsWith(uploadsDir)) {
       return res.status(403).json({ message: "Forbidden" });
     }
 

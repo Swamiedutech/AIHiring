@@ -278,20 +278,7 @@ exports.uploadResume = async (req, res) => {
             logger.warn(`[Resume AI] JD scoring failed for app ${app.id}: ${scoreError.message}`);
           }
 
-          // Manual scoring fallback
-          try {
-            const manualScoringService = require('../services/manualScoring.service');
-            const manualResults = await manualScoringService.scoreResumeManual(app.id, app.Job.id, aiParsedData);
-            if (jdScores.overall_fit_percentage < 40) {
-              jdScores.overall_fit_percentage = manualResults.overall_fit_percentage;
-              jdScores.matched_skills = manualResults.matched_skills;
-              jdScores.missing_skills = manualResults.missing_skills;
-            }
-            aiParsedData.strengths = Array.from(new Set([...(aiParsedData.strengths || []), ...(manualResults.strengths || [])]));
-            aiParsedData.weaknesses = Array.from(new Set([...(aiParsedData.weaknesses || []), ...(manualResults.weaknesses || [])]));
-          } catch (mErr) {
-            logger.error(`[Manual Scorer] Failed for app ${app.id}: ${mErr.message}`);
-          }
+          // Manual scoring fallback removed since manualScorer was deleted
         }
 
         const aiAnalysis = {
@@ -360,6 +347,7 @@ exports.uploadResume = async (req, res) => {
             area_of_interest: resolvedCandidateType === 'FRESHER' ? (aiParsedData.area_of_interest || candidate.area_of_interest) : candidate.area_of_interest,
             current_company: resolvedCandidateType === 'WORKING_PROFESSIONAL' ? (aiParsedData.current_company || candidate.current_company) : null,
             working_address: resolvedCandidateType === 'WORKING_PROFESSIONAL' ? (aiParsedData.working_address || candidate.working_address) : null,
+            internships: aiParsedData.experience_timeline || candidate.internships,
           });
         }
 
@@ -398,6 +386,7 @@ exports.uploadResume = async (req, res) => {
           area_of_interest: candidate.area_of_interest,
           current_company: candidate.current_company,
           working_address: candidate.working_address,
+          internships: candidate.internships,
         } : null
       },
     });
@@ -459,24 +448,7 @@ exports.reparseResume = async (req, res) => {
       };
       jdScores = await aiService.scoreResume(aiParsedData, jobRequirements);
 
-      // ========== ADDING MANUAL SCORING SERVICE FALLBACK/ENHANCEMENT ==========
-      try {
-        const manualScoringService = require('../services/manualScoring.service');
-        const manualResults = await manualScoringService.scoreResumeManual(application.id, application.Job.id, aiParsedData);
-        
-        // Merge manual results if JD score is low or remote AI failed
-        if (jdScores.overall_fit_percentage < 40) {
-           jdScores.overall_fit_percentage = manualResults.overall_fit_percentage;
-           jdScores.matched_skills = manualResults.matched_skills;
-           jdScores.missing_skills = manualResults.missing_skills;
-        }
-        
-        // Add manual insights
-        aiParsedData.strengths = Array.from(new Set([...(aiParsedData.strengths || []), ...(manualResults.strengths || [])]));
-        aiParsedData.weaknesses = Array.from(new Set([...(aiParsedData.weaknesses || []), ...(manualResults.weaknesses || [])]));
-      } catch (mErr) {
-        logger.error(`[Manual Scorer] Reparse fallback failed: ${mErr.message}`);
-      }
+      // ========== MANUAL SCORING SERVICE FALLBACK REMOVED ==========
     }
 
     // Update or Create AI Analysis
