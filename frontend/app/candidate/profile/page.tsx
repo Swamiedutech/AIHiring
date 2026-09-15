@@ -139,7 +139,8 @@ export default function CandidateProfilePage() {
       const autofillData = res.data?.data?.autofillData;
       if (autofillData) {
         applyAutofillData(autofillData);
-        toast.success("Resume parsed! Profile auto-filled. Please review and save.");
+        updateMutation.mutate({ ...form, ...autofillData });
+        toast.success("Resume parsed and profile auto-filled successfully!");
       } else {
         toast.success("Resume uploaded successfully.");
       }
@@ -155,7 +156,9 @@ export default function CandidateProfilePage() {
       const autofillData = res.data?.autofillData;
       if (autofillData) {
         applyAutofillData(autofillData);
-        toast.success("Profile auto-filled from resume! Please review and save.");
+        // Automatically save the auto-filled data to the database
+        updateMutation.mutate({ ...form, ...autofillData });
+        toast.success("Profile auto-filled and saved successfully!");
       } else {
         toast.info("No data extracted. Try re-uploading your resume.");
       }
@@ -171,7 +174,7 @@ export default function CandidateProfilePage() {
   const avatarSrc = candidate?.profile_image_path
     ? (candidate.profile_image_path.startsWith('http')
       ? candidate.profile_image_path
-      : getFileUrl(candidate.profile_image_path))
+      : getFileUrl(candidate.profile_image_path) + `&t=${candidate.updated_at || new Date().getTime()}`)
     : null;
 
   return (
